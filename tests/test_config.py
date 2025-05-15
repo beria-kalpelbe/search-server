@@ -1,7 +1,7 @@
 import pytest
 import tempfile
 import os
-from algo_science.config.config import Config
+from src.config.config import Config
 
 @pytest.fixture
 def temp_config_file():

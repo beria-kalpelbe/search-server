@@ -6,8 +6,8 @@ import socketserver
 import threading
 import time
 from typing import Type, Optional
-from algo_science.search.base import SearchAlgorithm
-from algo_science.search.algorithms import (
+from src.search.base import SearchAlgorithm
+from src.search.algorithms import (
     SimpleSearch,
     InMemorySearch,
     BinarySearch,
@@ -15,7 +15,7 @@ from algo_science.search.algorithms import (
     RegexSearch,
     BloomFilterSearch
 )
-from algo_science.config.config import Config
+from src.config.config import Config
 
 class SearchHandler(socketserver.BaseRequestHandler):
     """Handler for search requests."""

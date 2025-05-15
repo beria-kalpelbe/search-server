@@ -1,7 +1,7 @@
 import socket
 import ssl
 import time
-from algo_science.config.config import Config
+from src.config.config import Config
 
 def test_search(query: str, use_ssl: bool = True) -> str:
     """Send a search query to the server and return the response.

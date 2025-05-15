@@ -1,5 +1,5 @@
 import pytest
-from algo_science.search.algorithms import (
+from src.search.algorithms import (
     SimpleSearch,
     InMemorySearch,
     BinarySearch,
