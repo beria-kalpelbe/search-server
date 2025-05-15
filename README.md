@@ -18,7 +18,7 @@ openssl req -x509 -newkey rsa:2048 -keyout certs/server.key -out certs/server.cr
 3. Create a data file to search in:
 ```bash
 mkdir -p data
-echo "some test data" > data/test.txt
+echo "Existing line" > data/test.txt
 ```
 
 4. Configure the server (server.conf):

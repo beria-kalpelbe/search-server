@@ -90,10 +90,11 @@ class SearchHandler(socketserver.BaseRequestHandler):
                 
                 # Get the search query (remove newline)
                 query = data.decode('utf-8').strip()
+                print(f"Received query: {query}")
                 
                 # Perform search
                 results = list(self.search_algo.search(query))
-                
+                print(f"Search results: {results}")
                 # Send simple response
                 response = "STRING EXISTS\n" if results else "STRING NOT FOUND\n"
                 self.request.sendall(response.encode('utf-8'))
