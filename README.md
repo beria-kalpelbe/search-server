@@ -46,6 +46,13 @@ logging.file=logs/server.log
 search-server
 ```
 
+6. Test with a single request
+```bash
+nc localhost 8443
+Existing line
+Unexisting line
+```
+
 6. Test with the client:
 ```bash
 python test_client.py
@@ -61,14 +68,14 @@ The server accepts plain text queries and responds with either:
 
 ```
 .
-├── algo_science/          # Main package
-│   ├── config/           # Configuration handling
+├── src/                 # Main package
+│   ├── config/          # Configuration handling
 │   ├── search/          # Search algorithms
 │   └── server/          # Server implementation
 ├── certs/               # SSL certificates
 ├── data/                # Search data files
-├── server.conf          # Server configuration
-└── test_client.py       # Test client
+├── tests/               # Test folder
+└── server.conf          # Server configuration
 ```
 
 ## Search Algorithms
