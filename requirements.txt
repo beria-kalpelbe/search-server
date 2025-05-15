@@ -1,0 +1,29 @@
+# Core dependencies
+aiohttp>=3.8.0  # For async HTTP server capabilities
+cryptography>=41.0.0  # For SSL/TLS support
+python-dotenv>=1.0.0  # For environment variable management
+
+# Search and data structures
+regex>=2023.0.0  # Enhanced regex support
+mmh3>=4.0.0  # MurmurHash3 for hash-based search
+pybloom-live>=4.0.0  # Bloom filter implementation
+datrie>=0.8.0  # Trie data structure
+
+# Performance and benchmarking
+psutil>=5.9.0  # System and process utilities
+memory-profiler>=0.61.0  # Memory profiling
+line-profiler>=4.1.0  # Line-by-line profiling
+matplotlib>=3.7.0  # For generating benchmark charts
+pandas>=2.0.0  # For data analysis and benchmark results
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-benchmark>=4.0.0
+pytest-asyncio>=0.21.0
+
+# Development tools
+black>=23.0.0  # Code formatting
+isort>=5.12.0  # Import sorting
+mypy>=1.5.0  # Type checking
+flake8>=6.1.0  # Code linting 

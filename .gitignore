@@ -1,0 +1,90 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual Environment
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+data/*.txt
+certs/*.key
+certs/*.crt
+certs/*.csr
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+
+# Virtual Environment
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+.env
+.venv
+env.bak/
+venv.bak/
+
+# IDE
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# Project specific
+benchmark_results/
+*.csv
+*.png
+server.key
+server.crt
+server.csr
+.benchmarks/
+
+# Testing
+htmlcov/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-* 
