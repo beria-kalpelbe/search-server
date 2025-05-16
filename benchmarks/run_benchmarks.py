@@ -1,11 +1,8 @@
-"""Script to run benchmarks for all search algorithms."""
-
 import os
 import sys
 import argparse
 from typing import List
 
-# Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.search.algorithms import (
@@ -19,7 +16,6 @@ from src.search.algorithms import (
 from benchmarks.benchmark import Benchmark
 
 def main():
-    """Run benchmarks with various file sizes and configurations."""
     parser = argparse.ArgumentParser(description="Run search algorithm benchmarks")
     parser.add_argument("--sizes", type=int, nargs="+", default=[10000, 100000, 1000000],
                       help="File sizes to test")
@@ -29,7 +25,6 @@ def main():
                       help="Test with REREAD_ON_QUERY=True")
     args = parser.parse_args()
     
-    # Sample queries for testing
     queries = [
         "example",
         "test data",
@@ -43,7 +38,6 @@ def main():
         "data structures"
     ]
     
-    # Initialize benchmark framework
     benchmark = Benchmark(args.output_dir)
     
     print("Running benchmarks...")
@@ -53,14 +47,12 @@ def main():
     print(f"REREAD_ON_QUERY: {args.reread}")
     print()
     
-    # Run benchmarks
     benchmark.run_benchmark(
         file_sizes=args.sizes,
         queries=queries,
         reread=args.reread
     )
     
-    # Generate report
     print("\nGenerating reports...")
     benchmark.generate_report()
     

@@ -4,6 +4,13 @@ A simple search server that checks if a string exists in a file. Supports multip
 
 ## Quick Start
 
+0. Set up environment for Python 3.12
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
 1. Install the package:
 ```bash
 pip install -e .
@@ -21,24 +28,27 @@ mkdir -p data
 echo "Existing line" > data/test.txt
 ```
 
-4. Configure the server (server.conf):
+4. Configure the server (src/config/server.conf):
 ```ini
-server.host=localhost
-server.port=8443
-server.workers=4
-server.debug=false
+[Server]
+host = localhost
+port = 8443
+workers = 4
+debug = true
+use_ssl = true
+ssl_cert = certs/server.crt
+ssl_key = certs/server.key
 
-ssl.enabled=true
-ssl.cert_file=certs/server.crt
-ssl.key_file=certs/server.key
+[Search]
+algorithm = simple
+linux_path = data/200k.txt
+case_sensitive = false
+max_results = 100
+reread_on_query = true
 
-search.algorithm=inmemory
-search.data_file=data/test.txt
-search.case_sensitive=false
-search.max_results=100
-
-logging.level=INFO
-logging.file=logs/server.log
+[Logging]
+level = INFO
+file = logs/server.log 
 ```
 
 5. Start the server:
@@ -55,7 +65,7 @@ Unexisting line
 
 6. Test with the client:
 ```bash
-python test_client.py
+python src/client/client.py --queries "Existing line" "Unexisting line"
 ```
 
 ## Protocol
@@ -68,14 +78,16 @@ The server accepts plain text queries and responds with either:
 
 ```
 .
+├── benchmarks/          # Benchmarks
+├── certs/               # SSL certificates
+├── data/                # Search data files
+├── scripts/             # Helper scripts
 ├── src/                 # Main package
+|   ├── client/
 │   ├── config/          # Configuration handling
 │   ├── search/          # Search algorithms
 │   └── server/          # Server implementation
-├── certs/               # SSL certificates
-├── data/                # Search data files
-├── tests/               # Test folder
-└── server.conf          # Server configuration
+└── tests/               # Test folder
 ```
 
 ## Search Algorithms

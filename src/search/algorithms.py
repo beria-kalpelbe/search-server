@@ -1,102 +1,105 @@
-"""Implementation of various search algorithms."""
-
 import re
 import time
-from typing import Iterator, Dict, List, Optional
+import os
+from typing import Iterator, Dict, List, Optional, Set
 import mmh3
 from pybloom_live import BloomFilter
 import datrie
 from .base import SearchAlgorithm
 
-class SimpleSearch(SearchAlgorithm):
-    """Simple line-by-line search algorithm."""
-    
+class SimpleSearch(SearchAlgorithm):    
     def __init__(self, file_path: str):
         super().__init__(file_path)
         self.stats = {"comparisons": 0, "time_taken": 0}
+        self._file_size = os.path.getsize(file_path)
+        self._buffer_size = min(8192, self._file_size)
     
     def prepare(self) -> None:
-        """No preparation needed for simple search."""
+        pass
+    
+    def _read_file(self) -> None:
         pass
     
     def search(self, query: str) -> Iterator[str]:
+        super().search(query)
         start_time = time.time()
         self.stats["comparisons"] = 0
+        query_bytes = query.encode('utf-8') + b'\n'
         
-        with open(self.file_path, 'r') as f:
-            for line in f:
-                self.stats["comparisons"] += 1
-                if query in line:
-                    yield line.rstrip()
+        with open(self.file_path, 'rb') as f:
+            buffer = b''
+            while True:
+                chunk = f.read(self._buffer_size)
+                if not chunk:
+                    break
+                
+                buffer = buffer + chunk
+                lines = buffer.split(b'\n')
+                buffer = lines[-1]
+                
+                for line in lines[:-1]:
+                    self.stats["comparisons"] += 1
+                    if line == query_bytes.rstrip():
+                        yield line.decode('utf-8')
         
         self.stats["time_taken"] = time.time() - start_time
     
     def get_stats(self) -> dict:
         return self.stats
 
-class InMemorySearch(SearchAlgorithm):
-    """In-memory full file search."""
-    
+class InMemorySearch(SearchAlgorithm):    
     def __init__(self, file_path: str):
         super().__init__(file_path)
         self.stats = {"load_time": 0, "search_time": 0}
-        self._lines: List[str] = []
+        self._lines: Set[str] = set()
     
-    def prepare(self) -> None:
+    def _read_file(self) -> None:
         start_time = time.time()
-        with open(self.file_path, 'r') as f:
-            self._lines = f.readlines()
+        with open(self.file_path, 'rb') as f:
+            self._lines = {line.rstrip().decode('utf-8') for line in f}
         self.stats["load_time"] = time.time() - start_time
     
+    def prepare(self) -> None:
+        self._read_file()
+    
     def search(self, query: str) -> Iterator[str]:
+        super().search(query)
         start_time = time.time()
         
-        for line in self._lines:
-            if query in line:
-                yield line.rstrip()
+        if query in self._lines:
+            yield query
         
         self.stats["search_time"] = time.time() - start_time
     
     def get_stats(self) -> dict:
         return self.stats
 
-class BinarySearch(SearchAlgorithm):
-    """Binary search for sorted files."""
-    
+class BinarySearch(SearchAlgorithm):    
     def __init__(self, file_path: str):
         super().__init__(file_path)
         self.stats = {"comparisons": 0, "time_taken": 0}
         self._sorted_lines: List[str] = []
     
+    def _read_file(self) -> None:
+        with open(self.file_path, 'rb') as f:
+            self._sorted_lines = sorted(line.rstrip().decode('utf-8') for line in f)
+    
     def prepare(self) -> None:
-        with open(self.file_path, 'r') as f:
-            self._sorted_lines = sorted(f.readlines())
+        self._read_file()
     
     def search(self, query: str) -> Iterator[str]:
+        super().search(query)
         start_time = time.time()
         self.stats["comparisons"] = 0
         
         left, right = 0, len(self._sorted_lines) - 1
         while left <= right:
-            mid = (left + right) // 2
+            mid = (left + right) >> 1  # Faster than division
             self.stats["comparisons"] += 1
             
-            if query in self._sorted_lines[mid]:
-                # Search around the found position
-                yield self._sorted_lines[mid].rstrip()
-                
-                # Check surrounding lines
-                i = mid - 1
-                while i >= 0 and query in self._sorted_lines[i]:
-                    yield self._sorted_lines[i].rstrip()
-                    i -= 1
-                
-                i = mid + 1
-                while i < len(self._sorted_lines) and query in self._sorted_lines[i]:
-                    yield self._sorted_lines[i].rstrip()
-                    i += 1
+            if self._sorted_lines[mid] == query:
+                yield query
                 break
-            
             elif self._sorted_lines[mid] < query:
                 left = mid + 1
             else:
@@ -108,37 +111,31 @@ class BinarySearch(SearchAlgorithm):
         return self.stats
 
 class HashSearch(SearchAlgorithm):
-    """Hash-based search using MurmurHash3."""
     
     def __init__(self, file_path: str):
         super().__init__(file_path)
         self.stats = {"hash_time": 0, "search_time": 0}
-        self._hash_table: Dict[int, List[str]] = {}
+        self._hash_set: Set[str] = set()
     
-    def prepare(self) -> None:
+    def _read_file(self) -> None:
         start_time = time.time()
+        self._hash_set.clear()
         
-        with open(self.file_path, 'r') as f:
+        with open(self.file_path, 'rb') as f:
             for line in f:
-                # Hash each word in the line
-                for word in line.split():
-                    hash_val = mmh3.hash(word)
-                    if hash_val not in self._hash_table:
-                        self._hash_table[hash_val] = []
-                    self._hash_table[hash_val].append(line.rstrip())
+                self._hash_set.add(line.rstrip().decode('utf-8'))
         
         self.stats["hash_time"] = time.time() - start_time
     
+    def prepare(self) -> None:
+        self._read_file()
+    
     def search(self, query: str) -> Iterator[str]:
+        super().search(query)
         start_time = time.time()
         
-        hash_val = mmh3.hash(query)
-        if hash_val in self._hash_table:
-            seen = set()
-            for line in self._hash_table[hash_val]:
-                if line not in seen and query in line:
-                    seen.add(line)
-                    yield line
+        if query in self._hash_set:
+            yield query
         
         self.stats["search_time"] = time.time() - start_time
     
@@ -146,27 +143,43 @@ class HashSearch(SearchAlgorithm):
         return self.stats
 
 class RegexSearch(SearchAlgorithm):
-    """Regex-based search."""
     
     def __init__(self, file_path: str):
         super().__init__(file_path)
         self.stats = {"compile_time": 0, "search_time": 0}
         self._pattern: Optional[re.Pattern] = None
+        self._file_size = os.path.getsize(file_path)
+        self._buffer_size = min(8192, self._file_size)
+    
+    def _read_file(self) -> None:
+        pass
     
     def prepare(self) -> None:
-        """No preparation needed until search pattern is known."""
         pass
     
     def search(self, query: str) -> Iterator[str]:
+        super().search(query)
         start_compile = time.time()
-        self._pattern = re.compile(re.escape(query))
+        query_bytes = query.encode('utf-8')
         self.stats["compile_time"] = time.time() - start_compile
         
         start_search = time.time()
-        with open(self.file_path, 'r') as f:
-            for line in f:
-                if self._pattern.search(line):
-                    yield line.rstrip()
+        with open(self.file_path, 'rb') as f:
+            buffer = b''
+            while True:
+                chunk = f.read(self._buffer_size)
+                if not chunk:
+                    break
+                
+                buffer = buffer + chunk
+                lines = buffer.split(b'\n')
+                buffer = lines[-1]
+                
+                for line in lines[:-1]:
+                    if line.rstrip() == query_bytes:
+                        yield query
+                        self.stats["search_time"] = time.time() - start_search
+                        return
         
         self.stats["search_time"] = time.time() - start_search
     
@@ -174,38 +187,35 @@ class RegexSearch(SearchAlgorithm):
         return self.stats
 
 class BloomFilterSearch(SearchAlgorithm):
-    """Bloom filter based search."""
     
     def __init__(self, file_path: str, capacity: int = 1000000, error_rate: float = 0.001):
         super().__init__(file_path)
         self.stats = {"filter_build_time": 0, "search_time": 0}
         self._bloom = BloomFilter(capacity=capacity, error_rate=error_rate)
-        self._line_map: Dict[str, List[str]] = {}
+        self._lines: Set[str] = set()
     
-    def prepare(self) -> None:
+    def _read_file(self) -> None:
         start_time = time.time()
+        self._bloom = BloomFilter(capacity=1000000, error_rate=0.001)
+        self._lines.clear()
         
-        with open(self.file_path, 'r') as f:
+        with open(self.file_path, 'rb') as f:
             for line in f:
-                for word in line.split():
-                    self._bloom.add(word)
-                    if word not in self._line_map:
-                        self._line_map[word] = []
-                    self._line_map[word].append(line.rstrip())
+                line_str = line.rstrip().decode('utf-8')
+                self._bloom.add(line_str)
+                self._lines.add(line_str)
         
         self.stats["filter_build_time"] = time.time() - start_time
     
+    def prepare(self) -> None:
+        self._read_file()
+    
     def search(self, query: str) -> Iterator[str]:
+        super().search(query)
         start_time = time.time()
         
-        if query in self._bloom:
-            seen = set()
-            for word in query.split():
-                if word in self._line_map:
-                    for line in self._line_map[word]:
-                        if line not in seen and query in line:
-                            seen.add(line)
-                            yield line
+        if query in self._bloom and query in self._lines:
+            yield query
         
         self.stats["search_time"] = time.time() - start_time
     
