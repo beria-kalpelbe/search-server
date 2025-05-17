@@ -5,14 +5,15 @@ from typing import List
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.search.algorithms import (
-    SimpleSearch,
-    InMemorySearch,
-    BinarySearch,
-    HashSearch,
-    RegexSearch,
-    BloomFilterSearch
-)
+from src.search.algorithms.simple import SimpleSearch
+from src.search.algorithms.inmemory import InMemorySearch
+from src.search.algorithms.binary import BinarySearch
+from src.search.algorithms.hash import HashSearch
+from src.search.algorithms.regex import RegexSearch
+from src.search.algorithms.bloomfilter import BloomFilterSearch
+from src.search.algorithms.boyermoore import BoyerMoore
+from src.search.algorithms.rabinkarp import RabinKarp
+from src.search.algorithms.kmp import KMP
 from benchmarks.benchmark import Benchmark
 
 def main():

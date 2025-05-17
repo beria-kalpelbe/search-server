@@ -35,11 +35,11 @@ class SearchClient:
             with self.create_connection() as sock:
                 sock.sendall(f"{query}\n".encode('utf-8'))
                 response = sock.recv(1024).decode('utf-8').strip()
-                return response == "STRING EXISTS"
+                print(f"Response: {response}")
+                return response
                 
         except Exception as e:
-            print(f"Error during search for '{query}': {e}")
-            return False
+            raise ValueError(e)
 
 def run_concurrent_searches(client: SearchClient, queries: list, num_threads: int = 10):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
@@ -52,7 +52,7 @@ def run_concurrent_searches(client: SearchClient, queries: list, num_threads: in
             query = future_to_query[future]
             try:
                 found = future.result()
-                print(f"Query '{query}': {'STRING EXISTS' if found else 'STRING NOT FOUND'}")
+                print(f"Query '{query}': {found}")
             except Exception as e:
                 print(f"Query '{query}' generated an exception: {e}")
 

@@ -6,14 +6,16 @@ from typing import List, Type, Dict
 import pandas as pd
 import matplotlib.pyplot as plt
 from src.search.base import SearchAlgorithm
-from src.search.algorithms import (
-    SimpleSearch,
-    InMemorySearch,
-    BinarySearch,
-    HashSearch,
-    RegexSearch,
-    BloomFilterSearch
-)
+from src.search.algorithms.simple import SimpleSearch
+from src.search.algorithms.inmemory import InMemorySearch
+from src.search.algorithms.binary import BinarySearch
+from src.search.algorithms.hash import HashSearch
+from src.search.algorithms.regex import RegexSearch
+from src.search.algorithms.bloomfilter import BloomFilterSearch
+from src.search.algorithms.boyermoore import BoyerMoore
+from src.search.algorithms.rabinkarp import RabinKarp
+from src.search.algorithms.kmp import KMP
+
 
 class Benchmark:    
     def __init__(self, output_dir: str = "benchmark_results"):
@@ -24,7 +26,10 @@ class Benchmark:
             "Binary": BinarySearch,
             "Hash": HashSearch,
             "Regex": RegexSearch,
-            "BloomFilter": BloomFilterSearch
+            "BloomFilter": BloomFilterSearch,
+            "BoyerMoore": BoyerMoore,
+            "RabinKarp": RabinKarp,
+            "KMP": KMP,
         }
         self.results: Dict[str, List[Dict]] = {}
         os.makedirs(output_dir, exist_ok=True)

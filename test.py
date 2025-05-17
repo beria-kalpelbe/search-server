@@ -1,0 +1,1 @@
+f = open("logs/logs.log", "x")
