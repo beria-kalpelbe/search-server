@@ -16,15 +16,13 @@ class RabinKarp(SearchAlgorithm):
         self._stats = {
             "comparisons": 0,
             "time_elapsed": 0,
-            "matches_found": 0,
             "lines_processed": 0,
             "hash_collisions": 0
         }
         self.base = base
         self.prime = prime 
-    
-    def prepare(self) -> None:
-        self._read_file()
+        if not self.reread_on_query:
+            self._read_file()
     
     def _read_file(self) -> None:
         try:
@@ -43,20 +41,15 @@ class RabinKarp(SearchAlgorithm):
     
     def _calculate_hash(self, string: str, length: int) -> int:
         hash_value = 0
-        
         for i in range(length):
             hash_value = (hash_value * self.base + ord(string[i])) % self.prime
-            
         return hash_value
     
     def _recalculate_hash(self, old_hash: int, old_char: str, new_char: str, pattern_length: int) -> int:
         new_hash = (old_hash - ord(old_char) * pow(self.base, pattern_length - 1, self.prime)) % self.prime
-        
         new_hash = (new_hash * self.base + ord(new_char)) % self.prime
-        
         if new_hash < 0:
             new_hash += self.prime
-            
         return new_hash
     
     def _check_strings(self, text: str, pattern: str, start: int) -> bool:
@@ -66,7 +59,9 @@ class RabinKarp(SearchAlgorithm):
                 return False
         return True
     
-    def search(self, query: str) -> Iterator[str]:
+    def search(self, query: str) -> bool:
+        start_time = time.time()
+        super().search(query)
         if self.reread_on_query:
             self._read_file()
         
@@ -74,12 +69,10 @@ class RabinKarp(SearchAlgorithm):
             self._read_file()
         
         self._stats["comparisons"] = 0
-        self._stats["matches_found"] = 0
         self._stats["time_elapsed"] = 0
         self._stats["hash_collisions"] = 0
         
-        start_time = time.time()
-        
+        result = False
         for line in self._lines:
             if len(line) != len(query):
                 continue
@@ -89,13 +82,11 @@ class RabinKarp(SearchAlgorithm):
             
             if line_hash == query_hash:
                 if self._check_strings(line, query, 0):
-                    self._stats["matches_found"] += 1
-                    yield line
+                    return True
                 else:
                     self._stats["hash_collisions"] += 1
-        
         self._stats["time_elapsed"] = time.time() - start_time
+        return result
     
     def get_stats(self) -> dict:
-        """Get statistics about the last search operation."""
         return self._stats

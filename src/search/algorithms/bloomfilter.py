@@ -8,11 +8,14 @@ import datrie
 from src.search.base import SearchAlgorithm
 
 class BloomFilterSearch(SearchAlgorithm):
-    def __init__(self, file_path: str, capacity: int = 1000000, error_rate: float = 0.001):
+    def __init__(self, file_path: str, reread_on_query: bool = False, capacity: int = 1000000, error_rate: float = 0.001):
         super().__init__(file_path)
         self.stats = {"filter_build_time": 0, "search_time": 0}
         self._bloom = BloomFilter(capacity=capacity, error_rate=error_rate)
         self._lines: Set[str] = set()
+        self.reread_on_query = reread_on_query
+        if not self.reread_on_query:
+            self._read_file()
     
     def _read_file(self) -> None:
         start_time = time.time()
@@ -25,15 +28,13 @@ class BloomFilterSearch(SearchAlgorithm):
                 self._lines.add(line_str)
         self.stats["filter_build_time"] = time.time() - start_time
     
-    def prepare(self) -> None:
-        self._read_file()
-    
-    def search(self, query: str) -> Iterator[str]:
-        super().search(query)
+    def search(self, query: str) -> bool:
         start_time = time.time()
-        if query in self._bloom and query in self._lines:
-            yield query
+        super().search(query)
+        if self.reread_on_query:
+            self._read_file()
         self.stats["search_time"] = time.time() - start_time
+        return query in self._bloom and query in self._lines
     
     def get_stats(self) -> dict:
         return self.stats 

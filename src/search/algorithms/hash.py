@@ -9,10 +9,13 @@ from src.search.base import SearchAlgorithm
 
 class HashSearch(SearchAlgorithm):
     
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str, reread_on_query):
         super().__init__(file_path)
         self.stats = {"hash_time": 0, "search_time": 0}
         self._hash_set: Set[str] = set()
+        self.reread_on_query = reread_on_query
+        if not self.reread_on_query:
+            self._read_file()
     
     def _read_file(self) -> None:
         start_time = time.time()
@@ -24,17 +27,14 @@ class HashSearch(SearchAlgorithm):
         
         self.stats["hash_time"] = time.time() - start_time
     
-    def prepare(self) -> None:
-        self._read_file()
-    
-    def search(self, query: str) -> Iterator[str]:
-        super().search(query)
+    def search(self, query: str) -> bool:
         start_time = time.time()
-        
-        if query in self._hash_set:
-            yield query
-        
+        super().search(query)
+        if self.reread_on_query:
+            self._read_file()
+        result = query in self._hash_set
         self.stats["search_time"] = time.time() - start_time
-    
+        return result
+        
     def get_stats(self) -> dict:
         return self.stats

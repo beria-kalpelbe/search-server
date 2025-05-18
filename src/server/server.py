@@ -17,10 +17,11 @@ from src.search.algorithms.boyermoore import BoyerMoore
 from src.search.algorithms.rabinkarp import RabinKarp
 from src.search.algorithms.kmp import KMP
 from src.config.config import Config
-import logging
 import datetime
 import socket
 from textwrap import dedent
+import platform
+import psutil
 
 MAX_PAYLOAD_SIZE = 1024
 DEFAULT_THREAD_POOL_SIZE = 100
@@ -57,19 +58,20 @@ class SearchHandler(socketserver.BaseRequestHandler):
                 'kmp': KMP,
             }
             algorithm_class = algorithm_map.get(self.config.search_algorithm.lower(), InMemorySearch)
-            self.algorithm_instances[algo_key] = algorithm_class(self.config.linux_path)
-            self.algorithm_instances[algo_key].prepare()
+            self.algorithm_instances[algo_key] = algorithm_class(self.config.linux_path, self.config.reread_on_query)
+            # self.algorithm_instances[algo_key].prepare()
         self.search_algo = self.algorithm_instances[algo_key]
         self.search_algo.reread_on_query = self.config.reread_on_query
 
     def handle(self):
+        request_start = time.time()
         client_ip, client_port = self.client_address
         session_id = f"{client_ip}:{client_port}"
         self.config.logger.info(f"[{session_id}] New connection established")
         request_count = 0
         try:
             while True:
-                data = b""
+                data = bytearray()
                 while True:
                     remaining = MAX_PAYLOAD_SIZE - len(data)
                     if remaining <= 0:
@@ -79,40 +81,30 @@ class SearchHandler(socketserver.BaseRequestHandler):
                     chunk = self.request.recv(min(remaining, 4096))
                     if not chunk:
                         break
-                    data += chunk
-                    if b"\n" in data:
+                    data.extend(chunk)
+                    if b"\n" in chunk:
                         break
                 if not data:
-                    if request_count > 0:
-                        self.config.logger.info(f"[{session_id}] Connection closed after {request_count} requests")
-                    else:
-                        self.config.logger.info(f"[{session_id}] Connection closed without any requests")
+                    self.config.logger.info(f"[{session_id}] Connection closed after {request_count} requests" if request_count > 0 else f"[{session_id}] Connection closed without any requests")
                     break
                 request_count += 1
-                data = data.rstrip(b"\x00")
-                if len(data) == 0:
+                query = data.rstrip(b"\x00").decode('utf-8').strip()
+                if not query:
                     self.config.logger.warning(f"[{session_id}] Request #{request_count}: Empty request received")
+                    self.request.sendall(b"ERROR: Empty request\n")
                     continue
-                query = data.decode('utf-8').strip()
-                if len(query) > 30:
-                    log_query = f"{query[:30]}..." 
-                else:
-                    log_query = query
+                log_query = f"{query[:30]}..." if len(query) > 30 else query
                 self.config.logger.info(f"[{session_id}] Request #{request_count}: Search query '{log_query}' ({len(data)} bytes)")
                 if self.config.debug:
                     self.config.logger.debug(f"[{session_id}] Full query: '{query}'")
-                search_start = time.time()
                 if not self.config.case_sensitive:
                     query = query.lower()
-                result = list(self.search_algo.search(query))
+                # self.config.logger.info(f"Time before search elapsed: {(1000*(time.time() - request_start)):.2f} ms")
+                search_start = time.time()
+                result = self.search_algo.search(query)
                 search_time = time.time() - search_start
                 status = "FOUND" if result else "NOT FOUND"
                 self.config.logger.info(f"[{session_id}] Response #{request_count}: {status} (took {(search_time*1000):.2f}ms)")
-                if self.config.debug:
-                    if result:
-                        self.config.logger.debug(f"[{session_id}] Found {len(result)} matches")
-                        if len(result) <= 5:  # Only show details for small result sets
-                            self.config.logger.debug(f"[{session_id}] Matches: {result}")
                 response = "STRING EXISTS\n" if result else "STRING NOT FOUND\n"
                 self.request.sendall(response.encode('utf-8'))
         except ConnectionResetError:
@@ -138,11 +130,6 @@ class SearchHandler(socketserver.BaseRequestHandler):
                 self.request.sendall(b"ERROR: Internal server error\n")
             except:
                 pass
-        finally:
-            if request_count > 0:
-                self.config.logger.info(f"[{session_id}] Connection closed after processing {request_count} requests")
-            else:
-                self.config.logger.info(f"[{session_id}] Connection closed without processing any requests")
 
 class ThreadPoolMixIn:
     def __init__(self):
@@ -242,9 +229,9 @@ def run_server(config_file: str = "src/config/server.conf"):
     ┌────────────────────────────────────────────────────────────┐
     │                     SEARCH SERVER v1.0.0                   │
     ├────────────────────────────────────────────────────────────┤
-     Host: {config.host:<15}  \t Port: {config.port:<6}  
-     SSL: {('✓' if config.use_ssl else '✗'):<3} \t  Started: {start_time_str} 
-     Algorithm: {config.search_algorithm:<12}   \t Workers: {config.workers:<3}                    
+     Host: {config.host:<15}     Port: {config.port:<6}  
+     SSL: {('✓' if config.use_ssl else '✗'):<3}\t\t  Started: {start_time_str} 
+     Algorithm: {config.search_algorithm:<12}   Workers: {config.workers:<3}                    
     └────────────────────────────────────────────────────────────┘
     ┌────────────────────────────────────────────────────────────┐
     """
@@ -256,10 +243,7 @@ def run_server(config_file: str = "src/config/server.conf"):
     config.logger.info(f"  - Search Path: {config.linux_path}")
     config.logger.info(f"  - Request Queue Size: {REQUEST_QUEUE_SIZE}")
     
-    try:
-        import platform
-        import psutil
-        
+    try:        
         config.logger.info("System information:") if config.debug else None
         config.logger.info(f"  - OS: {platform.system()} {platform.release()}") if config.debug else None
         config.logger.info(f"  - CPU: {psutil.cpu_count(logical=True)} cores") if config.debug else None
@@ -287,8 +271,8 @@ def run_server(config_file: str = "src/config/server.conf"):
         ┌────────────────────────────────────────────────────────────┐
         │               INITIATING SERVER SHUTDOWN                   │
         ├────────────────────────────────────────────────────────────┤
-        │ Time: {shutdown_time.strftime("%Y-%m-%d %H:%M:%S")}                               │
-        │ Server uptime: {uptime_str:<43} │
+          Time: {shutdown_time.strftime("%Y-%m-%d %H:%M:%S")}
+          Server uptime: {uptime_str:<43} 
         └────────────────────────────────────────────────────────────┘
         """
         

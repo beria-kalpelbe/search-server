@@ -15,6 +15,7 @@ from src.search.algorithms.bloomfilter import BloomFilterSearch
 from src.search.algorithms.boyermoore import BoyerMoore
 from src.search.algorithms.rabinkarp import RabinKarp
 from src.search.algorithms.kmp import KMP
+from src.client.client import SearchClient
 
 
 class Benchmark:    
@@ -51,26 +52,19 @@ class Benchmark:
             for algo_name, algo_class in self.algorithms.items():
                 if algo_name not in self.results:
                     self.results[algo_name] = []                
-                algo = algo_class(filepath)
-                prep_start = time.time()
-                algo.prepare()
-                prep_time = time.time() - prep_start
+                algo = algo_class(filepath, reread_on_query=reread)
                 total_search_time = 0
-                total_matches = 0
                 for query in queries:
                     if reread and hasattr(algo, '_cache'):
                         algo._cache = None                    
                     search_start = time.time()
-                    matches = list(algo.search(query))
+                    matched = algo.search(query)
                     search_time = time.time() - search_start
                     total_search_time += search_time
-                    total_matches += len(matches)
                 stats = algo.get_stats()
                 stats.update({
                     "file_size": size,
-                    "prep_time": prep_time,
-                    "avg_search_time": total_search_time / len(queries),
-                    "total_matches": total_matches,
+                    "avg_search_time": 1000 * total_search_time / len(queries),
                 })
                 self.results[algo_name].append(stats)
                 algo.cleanup()
@@ -82,32 +76,17 @@ class Benchmark:
                 result["algorithm"] = algo_name
                 data.append(result)
         df = pd.DataFrame(data)
-        plt.figure(figsize=(15, 10))
-        plt.subplot(2, 2, 1)
-        for algo in df["algorithm"].unique():
-            algo_data = df[df["algorithm"] == algo]
-            plt.plot(algo_data["file_size"], algo_data["prep_time"], marker='o', label=algo)
-        plt.xlabel("File Size (lines)")
-        plt.ylabel("Preparation Time (s)")
-        plt.title("Preparation Time vs File Size")
-        plt.legend()
         
-        plt.subplot(2, 2, 2)
+        plt.figure(figsize=(15, 10))        
+        # plt.subplot(1, 2, 2)
         for algo in df["algorithm"].unique():
             algo_data = df[df["algorithm"] == algo]
             plt.plot(algo_data["file_size"], algo_data["avg_search_time"], marker='o', label=algo)
-        plt.xlabel("File Size (lines)")
-        plt.ylabel("Average Search Time (s)")
+        # plt.xscale('log')
+        plt.yscale('log')
+        plt.xlabel("File Size (lines) [Log Scale]")
+        plt.ylabel("Average Search Time (ms)")
         plt.title("Search Time vs File Size")
-        plt.legend()
-        
-        plt.subplot(2, 2, 3)
-        for algo in df["algorithm"].unique():
-            algo_data = df[df["algorithm"] == algo]
-            plt.plot(algo_data["file_size"], algo_data["total_matches"], marker='o', label=algo)
-        plt.xlabel("File Size (lines)")
-        plt.ylabel("Total Matches")
-        plt.title("Total Matches vs File Size")
         plt.legend()
         
         plt.tight_layout()
@@ -122,7 +101,5 @@ class Benchmark:
                 algo_data = df[df["algorithm"] == algo]
                 f.write(f"\n{algo} Algorithm:\n")
                 f.write("-" * (len(algo) + 11) + "\n")
-                f.write(f"Average preparation time: {algo_data['prep_time'].mean():.4f}s\n")
-                f.write(f"Average search time: {algo_data['avg_search_time'].mean():.4f}s\n")
-                f.write(f"Total matches found: {algo_data['total_matches'].sum()}\n")
+                f.write(f"Average search time: {algo_data['avg_search_time'].mean():.4f}ms\n")
                 f.write("\n") 

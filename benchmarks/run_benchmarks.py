@@ -1,29 +1,19 @@
 import os
 import sys
 import argparse
-from typing import List
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.search.algorithms.simple import SimpleSearch
-from src.search.algorithms.inmemory import InMemorySearch
-from src.search.algorithms.binary import BinarySearch
-from src.search.algorithms.hash import HashSearch
-from src.search.algorithms.regex import RegexSearch
-from src.search.algorithms.bloomfilter import BloomFilterSearch
-from src.search.algorithms.boyermoore import BoyerMoore
-from src.search.algorithms.rabinkarp import RabinKarp
-from src.search.algorithms.kmp import KMP
 from benchmarks.benchmark import Benchmark
 
 def main():
     parser = argparse.ArgumentParser(description="Run search algorithm benchmarks")
-    parser.add_argument("--sizes", type=int, nargs="+", default=[10000, 100000, 1000000],
-                      help="File sizes to test")
+    parser.add_argument("--sizes", type=int, nargs="+", default=list(range(10_000, 1_000_001, 50_000)),
+                      help="File sizes to test (from 10 to 10^6 with step 50)")
     parser.add_argument("--output-dir", default="benchmark_results",
                       help="Directory for benchmark results")
     parser.add_argument("--reread", action="store_true",
-                      help="Test with REREAD_ON_QUERY=True")
+                      help="Reread the file for each query (default: False)")
     args = parser.parse_args()
     
     queries = [
@@ -43,9 +33,8 @@ def main():
     
     print("Running benchmarks...")
     print("===================")
-    print(f"File sizes: {args.sizes}")
+    print(f"File sizes: {len(args.sizes)}")
     print(f"Number of queries: {len(queries)}")
-    print(f"REREAD_ON_QUERY: {args.reread}")
     print()
     
     benchmark.run_benchmark(

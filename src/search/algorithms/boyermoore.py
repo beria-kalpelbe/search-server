@@ -16,12 +16,10 @@ class BoyerMoore(SearchAlgorithm):
         self._stats = {
             "comparisons": 0,
             "time_elapsed": 0,
-            "matches_found": 0,
             "lines_processed": 0
         }
-    
-    def prepare(self) -> None:
-        self._read_file()
+        if not self.reread_on_query:
+            self._read_file()
     
     def _read_file(self) -> None:
         try:
@@ -81,15 +79,15 @@ class BoyerMoore(SearchAlgorithm):
         
         return table
     
-    def search(self, query: str) -> Iterator[str]:
+    def search(self, query: str) -> bool:
+        start_time = time.time()
+        super().search(query)
         if self.reread_on_query:
             self._read_file()
         if not self._cache:
             self._read_file()
         self._stats["comparisons"] = 0
-        self._stats["matches_found"] = 0
         self._stats["time_elapsed"] = 0
-        start_time = time.time()        
         bad_char_table = self._build_bad_char_table(query)
         good_suffix_table = self._build_good_suffix_table(query)
         for line_index, line in enumerate(self._lines):
@@ -104,14 +102,14 @@ class BoyerMoore(SearchAlgorithm):
                     k -= 1
                     j -= 1
                 if j == -1:
-                    self._stats["matches_found"] += 1
-                    yield line
-                    break
+                    self._stats["time_elapsed"] = time.time() - start_time
+                    return True
                 self._stats["comparisons"] += 1
                 bad_char_shift = bad_char_table.get(line[k], len(query))
                 good_suffix_shift = good_suffix_table[len(query) - 1 - j]
                 i += max(bad_char_shift, good_suffix_shift)
         self._stats["time_elapsed"] = time.time() - start_time
+        return False
     
     def get_stats(self) -> dict:
         return self._stats

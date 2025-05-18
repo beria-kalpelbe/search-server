@@ -29,7 +29,6 @@ class Config:
         self.search_algorithm = search_config.get('ALGORITHM')
         self.reread_on_query = search_config.getboolean('REREAD_ON_QUERY')
         self.case_sensitive = search_config.getboolean('CASE_SENSITIVE')
-        # self.max_results = search_config.getint('MAX_RESULTS')
         
         self.log_level = logging_config.get('level')
         self.log_file = logging_config.get('file')
@@ -46,7 +45,6 @@ class Config:
             with open(log_path, "x") as f:
                 pass
         except FileExistsError:
-            # print(f"Log file already exists: {log_path}")
             pass
     
     def _validate_config(self) -> None:
@@ -62,8 +60,6 @@ class Config:
                 raise ValueError(f"SSL key file not found: {self.ssl_key}")
     
     def _initiate_logger(self) -> None:
-        """Initialize the logger to output to both console and file (if specified)."""
-        # Set up log format
         log_format = "%(asctime)s [%(levelname)s] %(message)s"
         formatter = logging.Formatter(log_format)
         

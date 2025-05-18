@@ -8,21 +8,23 @@ import datrie
 from src.search.base import SearchAlgorithm
 
 class SimpleSearch(SearchAlgorithm):    
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str, reread_on_query: bool = False):
         super().__init__(file_path)
         self.stats = {"comparisons": 0, "time_taken": 0}
         self._file_size = os.path.getsize(file_path)
         self._buffer_size = min(8192, self._file_size)
-    
-    def prepare(self) -> None:
-        pass
+        self.reread_on_query = reread_on_query
+        if not self.reread_on_query:
+            self._read_file()
     
     def _read_file(self) -> None:
         pass
     
-    def search(self, query: str) -> Iterator[str]:
-        super().search(query)
+    def search(self, query: str) -> Iterator[bool]:
         start_time = time.time()
+        # super().search(query)
+        if self.reread_on_query:
+            self._read_file()
         self.stats["comparisons"] = 0
         query_bytes = query.encode('utf-8') + b'\n'
         
@@ -40,9 +42,10 @@ class SimpleSearch(SearchAlgorithm):
                 for line in lines[:-1]:
                     self.stats["comparisons"] += 1
                     if line == query_bytes.rstrip():
-                        yield line.decode('utf-8')
-        
+                        self.stats["time_taken"] = time.time() - start_time
+                        return True
         self.stats["time_taken"] = time.time() - start_time
+        return False
     
     def get_stats(self) -> dict:
         return self.stats

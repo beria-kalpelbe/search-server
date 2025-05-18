@@ -8,9 +8,9 @@ class SearchAlgorithm(ABC):
         self._cache = None
         self.reread_on_query = False
     
-    @abstractmethod
-    def prepare(self) -> None:
-        pass
+    # @abstractmethod
+    # def prepare(self) -> None:
+    #     pass
     
     @abstractmethod
     def _read_file(self) -> None:
