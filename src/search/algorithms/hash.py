@@ -9,7 +9,7 @@ from src.search.base import SearchAlgorithm
 
 class HashSearch(SearchAlgorithm):
     
-    def __init__(self, file_path: str, reread_on_query):
+    def __init__(self, file_path: str, reread_on_query: bool = False):
         super().__init__(file_path)
         self.stats = {"hash_time": 0, "search_time": 0}
         self._hash_set: Set[str] = set()

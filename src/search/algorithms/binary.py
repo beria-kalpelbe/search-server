@@ -29,7 +29,7 @@ class BinarySearch(SearchAlgorithm):
         result = False
         left, right = 0, len(self._sorted_lines) - 1
         while left <= right:
-            mid = (left + right) >> 1  # Faster than division
+            mid = (left + right) >> 1
             self.stats["comparisons"] += 1
             
             if self._sorted_lines[mid] == query:

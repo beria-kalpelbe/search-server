@@ -1,0 +1,17 @@
+[Unit]
+Description=This server recive a request and return if the query is found in the dtafile or not
+After=network.target
+
+[Service]
+User=beria
+Group=beria
+WorkingDirectory=search-server/
+ExecStart=/usr/bin/python3 search-server/src/server/server.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=search-server
+
+[Install]
+WantedBy=multi-user.target

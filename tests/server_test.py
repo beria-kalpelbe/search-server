@@ -1,308 +1,413 @@
-import unittest
-from unittest.mock import patch, MagicMock, mock_open, call
+"""Test suite for the search server and its components."""
+
+import os
 import socket
-import ssl
-import socketserver
+import sys
 import threading
-import queue
 import time
-import datetime
+import tempfile
+from typing import Generator, List, Tuple, Any
+from contextlib import contextmanager
+
+import pytest
+import ssl
+
+# Add src directory to path for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Test imports
+from src.search.algorithms.simple import SimpleSearch
+from src.search.algorithms.inmemory import InMemorySearch
+from src.search.algorithms.binary import BinarySearch
+from src.search.algorithms.hash import HashSearch
+from src.search.algorithms.regex import RegexSearch
+from src.search.algorithms.bloomfilter import BloomFilterSearch
+from src.search.algorithms.boyermoore import BoyerMoore
+from src.search.algorithms.rabinkarp import RabinKarp
+from src.search.algorithms.kmp import KMP
+
 from src.config.config import Config
-from src.server.server import (
-    SearchHandler,
-    ThreadPoolMixIn,
-    ThreadedTCPServer,
-    run_server,
-    MAX_PAYLOAD_SIZE,
-    DEFAULT_THREAD_POOL_SIZE,
-    REQUEST_QUEUE_SIZE
-)
+from src.server.server import SearchHandler, ThreadedTCPServer
 
-class TestSearchHandler(unittest.TestCase):
-    def setUp(self):
-        self.config = MagicMock(spec=Config)
-        self.config.use_ssl = False
-        self.config.search_algorithm = 'inmemory'
-        self.config.linux_path = '/test/path'
-        self.config.reread_on_query = False
-        self.config.case_sensitive = False
-        self.config.debug = False
-        self.config.logger = MagicMock()
-        
-        self.request = MagicMock()
-        self.client_address = ('127.0.0.1', 12345)
-        self.server = MagicMock()
-        self.server.config = self.config
-        
-        # Reset class-level instances
-        SearchHandler.algorithm_instances = {}
+# Constants
+CONFIG_FILE = "src/config/server.conf"
+TEST_DATA = "test data\nsome other data\nmore test lines\n"
+SERVER_STARTUP_DELAY = 0.5  # Seconds to wait for server startup
+TEST_PORT = 0  # Let OS assign port
 
-    def test_setup_without_ssl(self):
-        handler = SearchHandler()
-        handler.request = self.request
-        handler.client_address = self.client_address
-        handler.server = self.server
-        
-        handler.setup()
-        
-        self.assertIsNotNone(handler.search_algo)
-        self.assertEqual(len(SearchHandler.algorithm_instances), 1)
-        self.assertIn('inmemory_/test/path', SearchHandler.algorithm_instances)
 
-    @patch('ssl.SSLContext')
-    def test_setup_with_ssl(self, mock_ssl_context):
-        self.config.use_ssl = True
-        self.config.ssl_cert = '/path/to/cert'
-        self.config.ssl_key = '/path/to/key'
-        
-        mock_context = MagicMock()
-        mock_ssl_context.return_value = mock_context
-        
-        handler = SearchHandler()
-        handler.request = self.request
-        handler.client_address = self.client_address
-        handler.server = self.server
-        
-        handler.setup()
-        
-        mock_ssl_context.assert_called_once_with(ssl.PROTOCOL_TLS_SERVER)
-        mock_context.load_cert_chain.assert_called_once_with(
-            certfile='/path/to/cert', keyfile='/path/to/key'
-        )
-        mock_context.wrap_socket.assert_called_once_with(self.request, server_side=True)
+@pytest.fixture
+def temp_file() -> Generator[str, None, None]:
+    """Create a temporary test file with sample data.
 
-    def test_handle_empty_request(self):
-        handler = SearchHandler()
-        handler.request = MagicMock()
-        handler.request.recv.side_effect = [b'']
-        handler.client_address = self.client_address
-        handler.server = self.server
-        
-        handler.setup()
-        handler.handle()
-        
-        self.config.logger.info.assert_called_with(
-            "[127.0.0.1:12345] Connection closed without any requests"
-        )
+    Yields:
+        Path to the temporary file.
+    """
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tmp:
+        tmp.write(TEST_DATA)
+        tmp_path = tmp.name
 
-    def test_handle_single_request(self):
-        handler = SearchHandler()
-        handler.request = MagicMock()
-        handler.request.recv.side_effect = [b'test query\n', b'']
-        handler.client_address = self.client_address
-        handler.server = self.server
-        
-        mock_algo = MagicMock()
-        mock_algo.search.return_value = True
-        handler.search_algo = mock_algo
-        
-        handler.handle()
-        
-        mock_algo.search.assert_called_once_with('test query')
-        handler.request.sendall.assert_called_once_with(b"STRING EXISTS\n")
-        self.config.logger.info.assert_any_call(
-            "[127.0.0.1:12345] Request #1: Search query 'test query' (11 bytes)"
-        )
-        self.config.logger.info.assert_any_call(
-            "[127.0.0.1:12345] Response #1: FOUND (took 0.00ms)"
-        )
+    time.sleep(0.1)  # Ensure file is written
+    yield tmp_path
 
-    def test_handle_large_payload(self):
-        handler = SearchHandler()
-        handler.request = MagicMock()
-        # Send a payload that's too large
-        large_payload = b'A' * (MAX_PAYLOAD_SIZE + 1)
-        handler.request.recv.side_effect = [large_payload[:MAX_PAYLOAD_SIZE], large_payload[MAX_PAYLOAD_SIZE:]]
-        handler.client_address = self.client_address
-        handler.server = self.server
-        
-        handler.setup()
-        handler.handle()
-        
-        self.config.logger.error.assert_called_with(
-            "[127.0.0.1:12345] Request exceeds maximum payload size of 1024 bytes"
-        )
-        handler.request.sendall.assert_called_once_with(b"ERROR: Payload too large\n")
+    # Cleanup
+    try:
+        os.unlink(tmp_path)
+    except OSError:
+        pass
 
-    def test_handle_connection_reset_error(self):
-        handler = SearchHandler()
-        handler.request = MagicMock()
-        handler.request.recv.side_effect = ConnectionResetError()
-        handler.client_address = self.client_address
-        handler.server = self.server
-        
-        handler.setup()
-        handler.handle()
-        
-        self.config.logger.warning.assert_called_with(
-            "[127.0.0.1:12345] Connection reset by peer after 0 requests"
-        )
 
-class TestThreadPoolMixIn(unittest.TestCase):
-    def setUp(self):
-        self.mixin = ThreadPoolMixIn()
-        self.mixin.finish_request = MagicMock()
-        self.mixin.close_request = MagicMock()
-        
-    def test_process_request(self):
-        mock_request = MagicMock()
-        client_address = ('127.0.0.1', 12345)
-        
-        self.mixin.process_request(mock_request, client_address)
-        
-        # Check if the request was put in the queue
-        self.assertEqual(self.mixin._requests.qsize(), 1)
-        
-    def test_process_request_when_shutdown(self):
-        self.mixin._shutdown = True
-        mock_request = MagicMock()
-        client_address = ('127.0.0.1', 12345)
-        
-        self.mixin.process_request(mock_request, client_address)
-        
-        # Should not process the request
-        self.assertEqual(self.mixin._requests.qsize(), 0)
-        
-    def test_process_request_when_queue_full(self):
-        # Fill the queue
-        for _ in range(REQUEST_QUEUE_SIZE):
-            self.mixin._requests.put((MagicMock(), ('127.0.0.1', 12345)))
-        
-        mock_request = MagicMock()
-        client_address = ('127.0.0.1', 12345)
-        
-        self.mixin.process_request(mock_request, client_address)
-        
-        # Should have tried to send busy message
-        mock_request.sendall.assert_called_once_with(b"ERROR: Server too busy\n")
-        self.mixin.close_request.assert_called_once_with(mock_request)
+@pytest.fixture
+def real_config() -> Config:
+    """Create a test configuration with overrides.
 
-    @patch('concurrent.futures.ThreadPoolExecutor')
-    def test_server_close(self, mock_executor):
-        mock_executor_instance = MagicMock()
-        mock_executor.return_value = mock_executor_instance
-        
-        mixin = ThreadPoolMixIn()
-        mixin._shutdown = False
-        mixin._requests = MagicMock()
-        mixin._request_processor = MagicMock()
-        mixin._thread_pool = mock_executor_instance
-        
-        mixin.server_close()
-        
-        self.assertTrue(mixin._shutdown)
-        mixin._requests.put.assert_called_once_with((None, None), block=False)
-        mock_executor_instance.shutdown.assert_called_once_with(wait=False)
+    Returns:
+        Config: Test-ready configuration instance.
+    """
+    config = Config(CONFIG_FILE)
+    config.host = "localhost"
+    config.port = TEST_PORT
+    config.search_algorithm = "inmemory"
+    config.reread_on_query = False
+    return config
 
-class TestThreadedTCPServer(unittest.TestCase):
-    def setUp(self):
-        self.config = MagicMock(spec=Config)
-        self.config.workers = 10
-        
-    def test_init(self):
-        server = ThreadedTCPServer(('127.0.0.1', 8080), SearchHandler, self.config)
-        
-        self.assertEqual(server._max_workers, 10)
-        self.assertEqual(server.config, self.config)
-        
-    def test_finish_request(self):
-        server = ThreadedTCPServer(('127.0.0.1', 8080), SearchHandler, self.config)
-        mock_request = MagicMock()
-        client_address = ('127.0.0.1', 12345)
-        
-        with patch.object(SearchHandler, '__init__', return_value=None) as mock_handler_init:
-            server.finish_request(mock_request, client_address)
+
+@pytest.fixture
+def server_with_real_algorithm(
+    real_config: Config, temp_file: str
+) -> Generator[ThreadedTCPServer, None, None]:
+    """Fixture for a running server with test configuration.
+
+    Args:
+        real_config: Pytest fixture providing test config.
+        temp_file: Pytest fixture providing test data path.
+
+    Yields:
+        ThreadedTCPServer: Running server instance.
+    """
+    real_config.linux_path = temp_file
+    SearchHandler.algorithm_instances = {}  # Clear cache
+
+    server = ThreadedTCPServer(
+        (real_config.host, real_config.port), SearchHandler, real_config
+    )
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.daemon = True
+    server_thread.start()
+
+    time.sleep(SERVER_STARTUP_DELAY)
+    yield server
+
+    server.shutdown()
+    server.server_close()
+    server_thread.join(timeout=2)
+
+
+@contextmanager
+def client_socket(server: ThreadedTCPServer) -> Generator[socket.socket, None, None]:
+    """Context manager for test client sockets.
+
+    Args:
+        server: Server instance to connect to.
+
+    Yields:
+        socket: Connected client socket.
+    """
+    host, port = server.server_address
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if server.config.use_ssl:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.maximum_version = ssl.TLSVersion.TLSv1_3
+
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
             
-            mock_handler_init.assert_called_once_with(
-                mock_request, client_address, server, config=self.config
-            )
+            sock = context.wrap_socket(sock, server_hostname=host)
+    sock.connect((host, port))
+    sock.settimeout(2)
+    yield sock
+    # with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    #     sock.connect((host, port))
+    #     sock.settimeout(2)
+    #     yield sock
 
-class TestRunServer(unittest.TestCase):
-    @patch('server.ThreadedTCPServer')
-    @patch('server.Config')
-    @patch('socket.gethostname')
-    @patch('datetime.datetime')
-    @patch('platform.system')
-    @patch('platform.release')
-    @patch('psutil.cpu_count')
-    @patch('psutil.virtual_memory')
-    @patch('psutil.disk_usage')
-    def test_run_server(
-        self, mock_disk_usage, mock_virtual_memory, mock_cpu_count,
-        mock_release, mock_system, mock_datetime, mock_gethostname,
-        mock_config, mock_server
-    ):
-        # Setup mocks
-        mock_config_instance = MagicMock()
-        mock_config.return_value = mock_config_instance
-        mock_config_instance.host = 'localhost'
-        mock_config_instance.port = 8080
-        mock_config_instance.use_ssl = False
-        mock_config_instance.search_algorithm = 'inmemory'
-        mock_config_instance.workers = 10
-        mock_config_instance.linux_path = '/test/path'
-        mock_config_instance.debug = True
-        mock_config_instance.version = '1.0.0'
-        mock_config_instance.build_date = '2023-01-01'
-        
-        mock_gethostname.return_value = 'testhost'
-        
-        mock_now = MagicMock()
-        mock_now.strftime.return_value = '2023-01-01 12:00:00'
-        mock_datetime.now.return_value = mock_now
-        
-        mock_system.return_value = 'Linux'
-        mock_release.return_value = '5.4.0'
-        mock_cpu_count.return_value = 8
-        mock_memory = MagicMock()
-        mock_memory.total = 16 * 1024**3
-        mock_memory.available = 8 * 1024**3
-        mock_virtual_memory.return_value = mock_memory
-        mock_disk = MagicMock()
-        mock_disk.total = 500 * 1024**3
-        mock_disk.free = 200 * 1024**3
-        mock_disk_usage.return_value = mock_disk
-        
-        mock_server_instance = MagicMock()
-        mock_server.return_value = mock_server_instance
-        
-        # Simulate KeyboardInterrupt to stop serve_forever
-        mock_server_instance.serve_forever.side_effect = KeyboardInterrupt()
-        
-        # Run the server
-        run_server('test_config.conf')
-        
-        # Verify calls
-        mock_config.assert_called_once_with('test_config.conf')
-        mock_server.assert_called_once_with(
-            ('localhost', 8080), SearchHandler, mock_config_instance
+
+def send_query_and_get_response(
+    client: socket.socket, query: str
+) -> Tuple[bytes, bool]:
+    """Helper to send a query and get the server response.
+
+    Args:
+        client: Connected socket.
+        query: Search query string.
+
+    Returns:
+        tuple: (response_data, success_status)
+    """
+    try:
+        client.sendall(query.encode() + b"\n")
+        time.sleep(0.1)
+        return client.recv(1024), True
+    except (socket.timeout, ConnectionError):
+        return b"", False
+
+
+class TestSearchHandler:
+    """Test suite for SearchHandler functionality."""
+
+    def test_found_query(self, server_with_real_algorithm: ThreadedTCPServer) -> None:
+        """Test successful search query."""
+        with client_socket(server_with_real_algorithm) as client:
+            response, success = send_query_and_get_response(client, "test data")
+            assert success, "Communication failed"
+            assert response == b"STRING EXISTS\n"
+
+    def test_not_found_query(
+        self, server_with_real_algorithm: ThreadedTCPServer
+    ) -> None:
+        """Test unsuccessful search query."""
+        with client_socket(server_with_real_algorithm) as client:
+            response, success = send_query_and_get_response(client, "nonexistent")
+            assert success, "Communication failed"
+            assert response == b"STRING NOT FOUND\n"
+
+    def test_empty_request(self, server_with_real_algorithm: ThreadedTCPServer) -> None:
+        """Test empty query handling."""
+        with client_socket(server_with_real_algorithm) as client:
+            response, success = send_query_and_get_response(client, "")
+            assert success, "Communication failed"
+            assert response == b"ERROR: Empty request\n"
+
+    def test_oversized_request(
+        self, server_with_real_algorithm: ThreadedTCPServer
+    ) -> None:
+        """Test payload size enforcement."""
+        with client_socket(server_with_real_algorithm) as client:
+            client.sendall(b"x" * 1500 + b"\n")
+            time.sleep(0.1)
+            response = client.recv(1024)
+            assert response == b"ERROR: Payload too large\n"
+
+    def test_unicode_error(self, server_with_real_algorithm: ThreadedTCPServer) -> None:
+        """Test invalid encoding handling."""
+        with client_socket(server_with_real_algorithm) as client:
+            client.sendall(b"\xff\xfe\xfd\n")
+            time.sleep(0.1)
+            response = client.recv(1024)
+            assert response == b"ERROR: Invalid character encoding\n"
+
+
+class TestThreadedTCPServer:
+    """Test suite for ThreadedTCPServer functionality."""
+
+    def test_init_and_close(self, real_config: Config, temp_file: str) -> None:
+        """Test server lifecycle management."""
+        real_config.linux_path = temp_file
+        server = ThreadedTCPServer(
+            (real_config.host, real_config.port), SearchHandler, real_config
         )
-        
-        # Verify logging calls
-        expected_log_calls = [
-            call.info('    ┌────────────────────────────────────────────────────────────┐'),
-            call.info('    │                     SEARCH SERVER v1.0.0                   │'),
-            call.info('    ├────────────────────────────────────────────────────────────┤'),
-            call.info('     Host: localhost          Port: 8080    '),
-            call.info('     SSL: ✗                    Started: 2023-01-01 12:00:00 '),
-            call.info('     Algorithm: inmemory      Workers: 10                   '),
-            call.info('    └────────────────────────────────────────────────────────────┘'),
-            call.info('    ┌────────────────────────────────────────────────────────────┐'),
-            call.info('Server configuration details:'),
-            call.info('  - Search Path: /test/path'),
-            call.info('  - Request Queue Size: 1000'),
-            call.info('System information:'),
-            call.info('  - OS: Linux 5.4.0'),
-            call.info('  - CPU: 8 cores'),
-            call.info('  - Memory: 16GB total, 8GB available'),
-            call.info('  - Disk: 500GB total, 200GB free on search path'),
-            call.warning('[2023-01-01 12:00:00] Search server started successfully on localhost:8080'),
-            call.warning('Waiting for incoming connections...'),
-        ]
-        
-        # Check that all expected logging calls were made
-        for expected_call in expected_log_calls:
-            self.assertIn(expected_call, mock_config_instance.logger.method_calls)
 
-if __name__ == '__main__':
-    unittest.main()
+        assert server.config == real_config
+        assert server._max_workers == real_config.workers
+
+        server_thread = threading.Thread(target=server.serve_forever)
+        server_thread.daemon = True
+        server_thread.start()
+        time.sleep(0.2)
+
+        assert server_thread.is_alive()
+
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=1)
+        assert not server_thread.is_alive()
+
+    def test_case_insensitive_search(
+        self, real_config: Config, temp_file: str
+    ) -> None:
+        """Test case insensitive search configuration."""
+        real_config.case_sensitive = False
+        real_config.linux_path = temp_file
+
+        with open(temp_file, "a") as f:
+            f.write("UPPERCASE TEST\n")
+
+        server = ThreadedTCPServer(
+            (real_config.host, real_config.port), SearchHandler, real_config
+        )
+        server_thread = threading.Thread(target=server.serve_forever)
+        server_thread.daemon = True
+        server_thread.start()
+        time.sleep(SERVER_STARTUP_DELAY)
+
+        try:
+            with client_socket(server) as client:
+                response, success = send_query_and_get_response(client, "uppercase test")
+                assert success, "Communication failed"
+                assert response == b"STRING EXISTS\n"
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=1)
+
+    def test_address_in_use(self, real_config: Config) -> None:
+        """Test port collision handling."""
+        server1 = ThreadedTCPServer(
+            (real_config.host, TEST_PORT), SearchHandler, real_config
+        )
+        server_thread = threading.Thread(target=server1.serve_forever)
+        server_thread.daemon = True
+        server_thread.start()
+        time.sleep(0.2)
+
+        try:
+            host, port = server1.server_address
+            with pytest.raises(OSError) as excinfo:
+                ThreadedTCPServer((host, port), SearchHandler, real_config)
+
+            assert any(
+                msg in str(excinfo.value).lower()
+                for msg in ["address already in use", "busy"]
+            )
+        finally:
+            server1.shutdown()
+            server1.server_close()
+            server_thread.join(timeout=1)
+
+    def test_multiple_connections(
+        self, real_config: Config, temp_file: str
+    ) -> None:
+        """Test concurrent connection handling."""
+        real_config.linux_path = temp_file
+        server = ThreadedTCPServer(
+            (real_config.host, real_config.port), SearchHandler, real_config
+        )
+        server_thread = threading.Thread(target=server.serve_forever)
+        server_thread.daemon = True
+        server_thread.start()
+        time.sleep(SERVER_STARTUP_DELAY)
+
+        results: List[bool] = []
+
+        def client_task(query: str, expected: str) -> None:
+            try:
+                with client_socket(server) as client:
+                    response, success = send_query_and_get_response(client, query)
+                    results.append(success and response == expected.encode() + b"\n")
+            except Exception:
+                results.append(False)
+
+        threads = []
+        for i in range(5):
+            query = "test data" if i % 2 == 0 else "nonexistent"
+            expected = "STRING EXISTS" if i % 2 == 0 else "STRING NOT FOUND"
+            thread = threading.Thread(target=client_task, args=(query, expected))
+            threads.append(thread)
+            thread.start()
+
+        for thread in threads:
+            thread.join()
+
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=1)
+
+        assert all(results), "Some connections failed"
+        assert len(results) == 5, "Missing results"
+
+
+class TestAlgorithmSelection:
+    """Test suite for algorithm selection functionality."""
+
+    @pytest.mark.parametrize(
+        "algorithm_name",
+        [
+            "simple",
+            "inmemory",
+            "binary",
+            "hash",
+            "regex",
+            "bloom",
+            "boyermoore",
+            "rabinkarp",
+            "kmp",
+        ],
+    )
+    def test_algorithm_implementation(
+        self, algorithm_name: str, real_config: Config, temp_file: str
+    ) -> None:
+        """Test all supported search algorithms.
+
+        Args:
+            algorithm_name: Name of algorithm to test.
+            real_config: Pytest fixture providing test config.
+            temp_file: Pytest fixture providing test data path.
+        """
+        real_config.search_algorithm = algorithm_name
+        real_config.linux_path = temp_file
+        SearchHandler.algorithm_instances = {}  # Clear cache
+
+        server = ThreadedTCPServer(
+            (real_config.host, real_config.port), SearchHandler, real_config
+        )
+        server_thread = threading.Thread(target=server.serve_forever)
+        server_thread.daemon = True
+        server_thread.start()
+        time.sleep(SERVER_STARTUP_DELAY)
+
+        try:
+            with client_socket(server) as client:
+                response, success = send_query_and_get_response(client, "test data")
+                assert success, "Communication failed"
+                assert response == b"STRING EXISTS\n", (
+                    f"Algorithm {algorithm_name} failed basic test"
+                )
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=2)
+
+
+class TestIntegration:
+    """Comprehensive integration test suite."""
+
+    def test_full_workflow(self, real_config: Config, temp_file: str) -> None:
+        """Test complete server workflow with multiple operations.
+
+        Args:
+            real_config: Pytest fixture providing test config.
+            temp_file: Pytest fixture providing test data path.
+        """
+        with open(temp_file, "w") as f:
+            f.write("test line 1\ntest data line\nsome random text\nLAST LINE\n")
+
+        real_config.linux_path = temp_file
+        real_config.search_algorithm = "inmemory"
+        SearchHandler.algorithm_instances = {}  # Clear cache
+
+        server = ThreadedTCPServer(
+            (real_config.host, real_config.port), SearchHandler, real_config
+        )
+        server_thread = threading.Thread(target=server.serve_forever)
+        server_thread.daemon = True
+        server_thread.start()
+        time.sleep(SERVER_STARTUP_DELAY)
+
+        try:
+            test_cases = [
+                ("test data line", b"STRING EXISTS\n"),
+                ("LAST LINE", b"STRING EXISTS\n"),
+                ("nonexistent", b"STRING NOT FOUND\n"),
+                ("", b"ERROR: Empty request\n"),
+            ]
+
+            for query, expected in test_cases:
+                with client_socket(server) as client:
+                    response, success = send_query_and_get_response(client, query)
+                    assert success, f"Failed on query: {query}"
+                    assert response == expected, f"Unexpected response for: {query}"
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=2)

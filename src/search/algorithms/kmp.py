@@ -15,7 +15,7 @@ class KMP(SearchAlgorithm):
         self._lines = []
         self._stats = {
             "comparisons": 0,
-            "time_elapsed": 0,
+            "search_time": 0,
             "lines_processed": 0,
             "prefix_table_computations": 0
         }
@@ -94,14 +94,14 @@ class KMP(SearchAlgorithm):
             self._read_file()
         
         self._stats["comparisons"] = 0
-        self._stats["time_elapsed"] = 0
+        self._stats["search_time"] = 0
         self._stats["prefix_table_computations"] = 0
         
         result = False
         for line in self._lines:
             if self._kmp_search(line, query):
                 return True
-        self._stats["time_elapsed"] = time.time() - start_time
+        self._stats["search_time"] = time.time() - start_time
         return result
     
     def get_stats(self) -> dict:

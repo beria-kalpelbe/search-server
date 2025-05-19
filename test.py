@@ -1,1 +1,1 @@
-f = open("logs/logs.log", "x")
+print(len("\xff\xfe\xfd\n"))
