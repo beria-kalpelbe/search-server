@@ -15,7 +15,7 @@ from src.search.algorithms.bloomfilter import BloomFilterSearch
 from src.search.algorithms.boyermoore import BoyerMoore
 from src.search.algorithms.rabinkarp import RabinKarp
 from src.search.algorithms.kmp import KMP
-from src.client.client import SearchClient
+from src.client import SearchClient
 import tracemalloc
 
 

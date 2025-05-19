@@ -8,6 +8,34 @@ import datrie
 from src.search.base import SearchAlgorithm
 
 class BoyerMoore(SearchAlgorithm):
+    """
+    
+    Boyer-Moore string search algorithm implementation.
+    This class implements the Boyer-Moore algorithm for efficient substring search within
+    a text file. It extends the `SearchAlgorithm` base class and provides methods
+    to preprocess the input file, compute the bad character and good suffix tables,
+    and perform the search operation.
+    
+    Attributes:
+        reread_on_query (bool): Determines whether the file should be re-read on
+            every search query. Defaults to False.
+        _cache (str): Cached content of the file.
+        _lines (List[str]): List of lines from the file.
+        _stats (dict): Dictionary to store statistics about the search process,
+            including the number of comparisons, search time, and lines processed.
+            
+        pattern_length (int): Length of the search pattern.
+        search_results (List[int]): List to store the indices of found occurrences.
+        
+    Methods:
+        _read_file(): Reads the file and populates the _lines attribute.
+        _build_bad_char_table(pattern: str) -> dict: Builds the bad character table.
+        _find_suffix_length(pattern: str, p: int) -> int: Finds the length of the suffix.
+        _is_prefix(pattern: str, p: int) -> bool: Checks if a substring is a prefix.
+        _build_good_suffix_table(pattern: str) -> List[int]: Builds the good suffix table.
+        search(query: str) -> bool: Searches for the provided query string in the file.
+        get_stats() -> dict: Returns statistics about the last search operation.
+    """
     def __init__(self, file_path: str, reread_on_query: bool = False):
         super().__init__(file_path)
         self.reread_on_query = reread_on_query
@@ -113,3 +141,83 @@ class BoyerMoore(SearchAlgorithm):
     
     def get_stats(self) -> dict:
         return self._stats
+
+
+class HashSearch(SearchAlgorithm):
+    """
+    Hash-Based Search Algorithm.
+
+    This class provides an implementation of a search algorithm using a hash
+    set for efficient membership testing.
+
+    Attributes:
+        file_path (str): Path to the file to be searched.
+        reread_on_query (bool): Whether to reread the file for each query.
+        stats (dict): Statistics about the search process.
+        _hash_set (Set[str]): A set of hashed lines read from the file.
+    """
+
+    def __init__(self, file_path: str, reread_on_query: bool = False) -> None:
+        """
+        Initialize the HashSearch instance.
+
+        Args:
+            file_path (str): Path to the file to be searched.
+            reread_on_query (bool): Whether to reread the file for each query.
+        """
+        super().__init__(file_path)
+        self.stats = {"hash_time": 0.0, "search_time": 0.0}
+        self._hash_set: Set[str] = set()
+        self.reread_on_query = reread_on_query
+
+        if not self.reread_on_query:
+            self._read_file()
+
+    def _read_file(self) -> None:
+        """
+        Read the file and populate the hash set.
+
+        This method reads the file specified by `file_path`, decodes its lines,
+        and adds them to the `_hash_set`.
+        """
+        start_time = time.time()
+        self._hash_set.clear()
+
+        try:
+            with open(self.file_path, 'rb') as file:
+                for line in file:
+                    self._hash_set.add(line.rstrip().decode('utf-8'))
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File not found: {self.file_path}")
+        except Exception as e:
+            raise RuntimeError(f"Error reading file: {e}")
+
+        self.stats["hash_time"] = time.time() - start_time
+
+    def search(self, query: str) -> bool:
+        """
+        Perform a search for the query string using the hash set.
+
+        Args:
+            query (str): The string to search for.
+
+        Returns:
+            bool: True if the query is found, False otherwise.
+        """
+        start_time = time.time()
+
+        if self.reread_on_query:
+            self._read_file()
+
+        result = query in self._hash_set
+        self.stats["search_time"] = time.time() - start_time
+        return result
+
+    def get_stats(self) -> dict:
+        """
+        Retrieve search statistics.
+
+        Returns:
+            dict: A dictionary containing search statistics.
+        """
+        return self.stats

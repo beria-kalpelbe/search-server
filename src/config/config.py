@@ -1,10 +1,3 @@
-"""Configuration management for the Search Server.
-
-This module provides a `Config` class that handles reading, validating, and managing
-server configurations from an INI file. It also sets up logging with both console
-and file output (with rotation).
-"""
-
 import os
 import sys
 import configparser
@@ -53,7 +46,6 @@ class Config:
 
         self.config.read(config_file)
 
-        # Load SERVER section
         server_config = self.config["SERVER"]
         self.host: str = server_config.get("HOST", "localhost")
         self.port: int = server_config.getint("PORT", 8080)
@@ -63,14 +55,12 @@ class Config:
         self.workers: int = server_config.getint("WORKERS", 4)
         self.debug: bool = server_config.getboolean("DEBUG", False)
 
-        # Load SEARCH section
         search_config = self.config["SEARCH"]
-        self.linux_path: str = search_config.get("LINUX_PATH", "data/200k.txt")
+        self.linux_path: str = search_config.get("LINUX_PATH")
         self.search_algorithm: str = search_config.get("ALGORITHM", "simple")
-        self.reread_on_query: bool = search_config.getboolean("REREAD_ON_QUERY", False)
-        self.case_sensitive: bool = search_config.getboolean("CASE_SENSITIVE", False)
+        self.reread_on_query: bool = search_config.getboolean("REREAD_ON_QUERY")
+        self.case_sensitive: bool = search_config.getboolean("CASE_SENSITIVE")
 
-        # Load LOGGING section
         logging_config = self.config["LOGGING"]
         self.log_level: str = logging_config.get("level", "INFO")
         self.log_file: Optional[str] = logging_config.get("file")
@@ -126,23 +116,19 @@ class Config:
         log_format = "%(asctime)s [%(levelname)s] %(message)s"
         formatter = logging.Formatter(log_format)
 
-        # Resolve log level (defaults to INFO if invalid)
         log_level = getattr(logging, self.log_level.upper(), logging.INFO)
 
         self.logger = logging.getLogger("SearchServer")
         self.logger.setLevel(log_level)
 
-        # Clear existing handlers to avoid duplicates
         if self.logger.hasHandlers():
             self.logger.handlers.clear()
 
-        # Console handler (always enabled)
         console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setFormatter(formatter)
         console_handler.setLevel(log_level)
         self.logger.addHandler(console_handler)
 
-        # File handler (if log_file is specified)
         if self.log_file:
             try:
                 self._create_log_file(self.log_file)
@@ -188,3 +174,16 @@ class Config:
         """
         with open(config_file, "w", encoding="utf-8") as f:
             self.config.write(f)
+    
+    def remove_option(self, section: str, key: str) -> None:
+        """Removes a key from the configuration.
+
+        Args:
+            section: INI section name.
+            key: Key within the section.
+        """
+        if section in self.config and key in self.config[section]:
+            del self.config[section][key]
+            self.save(self.config_file)
+        else:
+            raise KeyError(f"Key '{key}' not found in section '{section}'")

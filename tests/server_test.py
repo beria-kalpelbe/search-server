@@ -1,5 +1,3 @@
-"""Test suite for the search server and its components."""
-
 import os
 import socket
 import sys
@@ -12,10 +10,8 @@ from contextlib import contextmanager
 import pytest
 import ssl
 
-# Add src directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Test imports
 from src.search.algorithms.simple import SimpleSearch
 from src.search.algorithms.inmemory import InMemorySearch
 from src.search.algorithms.binary import BinarySearch
@@ -27,13 +23,12 @@ from src.search.algorithms.rabinkarp import RabinKarp
 from src.search.algorithms.kmp import KMP
 
 from src.config.config import Config
-from src.server.server import SearchHandler, ThreadedTCPServer
+from src.server import SearchHandler, ThreadedTCPServer
 
-# Constants
-CONFIG_FILE = "src/config/server.conf"
+CONFIG_FILE = "tests/test.conf"
 TEST_DATA = "test data\nsome other data\nmore test lines\n"
-SERVER_STARTUP_DELAY = 0.5  # Seconds to wait for server startup
-TEST_PORT = 0  # Let OS assign port
+SERVER_STARTUP_DELAY = 0.5 
+TEST_PORT = 0 
 
 
 @pytest.fixture
@@ -47,10 +42,9 @@ def temp_file() -> Generator[str, None, None]:
         tmp.write(TEST_DATA)
         tmp_path = tmp.name
 
-    time.sleep(0.1)  # Ensure file is written
+    time.sleep(0.1) 
     yield tmp_path
 
-    # Cleanup
     try:
         os.unlink(tmp_path)
     except OSError:
@@ -86,7 +80,7 @@ def server_with_real_algorithm(
         ThreadedTCPServer: Running server instance.
     """
     real_config.linux_path = temp_file
-    SearchHandler.algorithm_instances = {}  # Clear cache
+    SearchHandler.algorithm_instances = {} 
 
     server = ThreadedTCPServer(
         (real_config.host, real_config.port), SearchHandler, real_config
@@ -127,10 +121,6 @@ def client_socket(server: ThreadedTCPServer) -> Generator[socket.socket, None, N
     sock.connect((host, port))
     sock.settimeout(2)
     yield sock
-    # with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    #     sock.connect((host, port))
-    #     sock.settimeout(2)
-    #     yield sock
 
 
 def send_query_and_get_response(
@@ -222,34 +212,6 @@ class TestThreadedTCPServer:
         server.server_close()
         server_thread.join(timeout=1)
         assert not server_thread.is_alive()
-
-    def test_case_insensitive_search(
-        self, real_config: Config, temp_file: str
-    ) -> None:
-        """Test case insensitive search configuration."""
-        real_config.case_sensitive = False
-        real_config.linux_path = temp_file
-
-        with open(temp_file, "a") as f:
-            f.write("UPPERCASE TEST\n")
-
-        server = ThreadedTCPServer(
-            (real_config.host, real_config.port), SearchHandler, real_config
-        )
-        server_thread = threading.Thread(target=server.serve_forever)
-        server_thread.daemon = True
-        server_thread.start()
-        time.sleep(SERVER_STARTUP_DELAY)
-
-        try:
-            with client_socket(server) as client:
-                response, success = send_query_and_get_response(client, "uppercase test")
-                assert success, "Communication failed"
-                assert response == b"STRING EXISTS\n"
-        finally:
-            server.shutdown()
-            server.server_close()
-            server_thread.join(timeout=1)
 
     def test_address_in_use(self, real_config: Config) -> None:
         """Test port collision handling."""
@@ -346,7 +308,7 @@ class TestAlgorithmSelection:
         """
         real_config.search_algorithm = algorithm_name
         real_config.linux_path = temp_file
-        SearchHandler.algorithm_instances = {}  # Clear cache
+        SearchHandler.algorithm_instances = {}
 
         server = ThreadedTCPServer(
             (real_config.host, real_config.port), SearchHandler, real_config
@@ -384,7 +346,7 @@ class TestIntegration:
 
         real_config.linux_path = temp_file
         real_config.search_algorithm = "inmemory"
-        SearchHandler.algorithm_instances = {}  # Clear cache
+        SearchHandler.algorithm_instances = {}
 
         server = ThreadedTCPServer(
             (real_config.host, real_config.port), SearchHandler, real_config

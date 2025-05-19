@@ -1,46 +1,92 @@
-import re
-import time
 import os
-from typing import Iterator, Dict, List, Optional, Set
-import mmh3
-from pybloom_live import BloomFilter
-import datrie
-from src.search.base import SearchAlgorithm
+import time
+from typing import List
 
-class BinarySearch(SearchAlgorithm):    
-    def __init__(self, file_path: str, reread_on_query: bool = False):
-        super().__init__(file_path)
-        self.stats = {"comparisons": 0, "time_taken": 0}
-        self._sorted_lines: List[str] = []
+
+class BinarySearch:
+    """
+    Binary Search Algorithm.
+
+    This class provides an implementation of the binary search algorithm for
+    searching a query string in a sorted list of lines read from a file.
+
+    Attributes:
+        file_path (str): Path to the file to be searched.
+        reread_on_query (bool): Whether to reread the file for each query.
+        stats (dict): Statistics about the search process.
+        _sorted_lines (List[str]): Sorted lines read from the file.
+    """
+
+    def __init__(self, file_path: str, reread_on_query: bool = False) -> None:
+        """
+        Initialize the BinarySearch instance.
+
+        Args:
+            file_path (str): Path to the file to be searched.
+            reread_on_query (bool): Whether to reread the file for each query.
+        """
+        self.file_path = file_path
         self.reread_on_query = reread_on_query
+        self.stats = {"comparisons": 0, "time_taken": 0.0}
+        self._sorted_lines: List[str] = []
+
         if not self.reread_on_query:
             self._read_file()
-    
+
     def _read_file(self) -> None:
-        with open(self.file_path, 'rb') as f:
-            self._sorted_lines = sorted(line.rstrip().decode('utf-8') for line in f)
-    
+        """
+        Read and sort the lines from the file.
+
+        This method reads the file specified by `file_path`, decodes its lines,
+        and stores them in `_sorted_lines` in sorted order.
+        """
+        try:
+            with open(self.file_path, 'rb') as file:
+                self._sorted_lines = sorted(
+                    line.rstrip().decode('utf-8') for line in file
+                )
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File not found: {self.file_path}")
+        except Exception as e:
+            raise RuntimeError(f"Error reading file: {e}")
+
     def search(self, query: str) -> bool:
+        """
+        Perform a binary search for the query string.
+
+        Args:
+            query (str): The string to search for.
+
+        Returns:
+            bool: True if the query is found, False otherwise.
+        """
         start_time = time.time()
-        super().search(query)
+        self.stats["comparisons"] = 0
+
         if self.reread_on_query:
             self._read_file()
-        self.stats["comparisons"] = 0
-        result = False
+
         left, right = 0, len(self._sorted_lines) - 1
         while left <= right:
-            mid = (left + right) >> 1
+            mid = (left + right) // 2
             self.stats["comparisons"] += 1
-            
+
             if self._sorted_lines[mid] == query:
-                result = True
-                break
+                self.stats["time_taken"] = time.time() - start_time
+                return True
             elif self._sorted_lines[mid] < query:
                 left = mid + 1
             else:
                 right = mid - 1
+
         self.stats["time_taken"] = time.time() - start_time
-        return result
-    
+        return False
+
     def get_stats(self) -> dict:
+        """
+        Retrieve search statistics.
+
+        Returns:
+            dict: A dictionary containing search statistics.
+        """
         return self.stats

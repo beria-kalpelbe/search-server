@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-# Must run as root
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root or with sudo"
   exit 1
@@ -51,8 +50,8 @@ Description=This server recive a request and return if the query is found in the
 After=network.target
 
 [Service]
-User=USER_TO_REPLACE
-Group=GROUP_TO_REPLACE
+User=beria
+Group=beria
 WorkingDirectory=$INSTALL_DIR
 ExecStart=$VENV_DIR/bin/python3 $INSTALL_DIR/src/server/server.py
 Restart=always

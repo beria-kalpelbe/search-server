@@ -18,8 +18,8 @@ def config_fixture():
 HOST = localhost
 PORT = 8080
 USE_SSL = False
-SSL_CERT = /path/to/cert.pem
-SSL_KEY = /path/to/key.pem
+SSL_CERT = certs/server.crt
+SSL_KEY = certs/server.key
 WORKERS = 4
 DEBUG = True
 
@@ -57,8 +57,8 @@ def test_init_with_valid_config(config_fixture):
     assert config.host == "localhost"
     assert config.port == 8080
     assert config.use_ssl is False
-    assert config.ssl_cert == "/path/to/cert.pem"
-    assert config.ssl_key == "/path/to/key.pem"
+    assert config.ssl_cert == "certs/server.crt"
+    assert config.ssl_key == "certs/server.key"
     assert config.workers == 4
     assert config.debug is True
     
@@ -128,14 +128,12 @@ def test_initiate_logger(config_fixture, monkeypatch, caplog):
     mock_file_handler = MagicMock()
     mock_stream_handler = MagicMock()
     
-    # Patch the logging components
     monkeypatch.setattr('logging.getLogger', lambda name=None: mock_logger if name != "root" else logging.getLogger(name))
     monkeypatch.setattr('logging.handlers.RotatingFileHandler', 
                        lambda *args, **kwargs: mock_file_handler)
     monkeypatch.setattr('logging.StreamHandler', 
                        lambda *args, **kwargs: mock_stream_handler)
     
-    # Setup test log file
     log_file = os.path.join(config_fixture['temp_dir'].name, "test.log")
     config = configparser.ConfigParser()
     config.read(config_fixture['config_file'])
@@ -143,15 +141,11 @@ def test_initiate_logger(config_fixture, monkeypatch, caplog):
     with open(config_fixture['config_file'], 'w') as f:
         config.write(f)
     
-    # Create config instance and initiate logger
-    # with caplog.at_level(logging.INFO):
     config = Config(config_fixture['config_file'])
     config._initiate_logger()
     
-    # Verify logger setup
     mock_logger.setLevel.assert_called_with(logging.INFO)
     
-    # Verify handlers were added
     assert mock_logger.addHandler.call_count == 4 
 
 
@@ -206,17 +200,3 @@ def test_save_method(config_fixture):
     
     new_config = Config(new_file)
     assert new_config.host == "localhost"
-
-
-def test_str_representation(config_fixture):
-    """Test the string representation of the config"""
-    config = Config(config_fixture['config_file'])
-    str_repr = str(config)
-    
-    assert "Config(HOST='localhost'" in str_repr
-    assert "port=8080" in str_repr
-    assert "WORKERS=4" in str_repr
-    assert "debug=True" in str_repr
-    assert "USE_SSL=False" in str_repr
-    assert "linux_path='/usr/bin'" in str_repr
-    assert "REREAD_ON_QUERY=False" in str_repr

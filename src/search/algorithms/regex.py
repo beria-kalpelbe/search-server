@@ -8,7 +8,42 @@ import datrie
 from src.search.base import SearchAlgorithm
 
 class RegexSearch(SearchAlgorithm):
-    
+    """
+    RegexSearch Algorithm Implementation for String Search
+
+    This class implements a regular expression-based search algorithm that extends
+    the SearchAlgorithm base class. Despite its name, the current implementation 
+    performs exact byte-level matching rather than regex pattern matching, comparing
+    each line in the file with the query string.
+
+    The search is performed on a line-by-line basis, with each line compared directly
+    to the query after encoding to bytes. The class can either cache the file content
+    or reread it for each query based on configuration.
+
+    Args:
+        file_path (str): Path to the file to search in
+        reread_on_query (bool, optional): Whether to reread the file for each query. Defaults to False.
+
+    Attributes:
+        stats (Dict): Dictionary tracking search performance statistics including compile time and search time
+        _pattern (Optional[re.Pattern]): Placeholder for regex pattern (unused in current implementation)
+        _file_size (int): Size of the target file in bytes
+        _buffer_size (int): Buffer size for file reading, capped at 8192 bytes or file size
+        reread_on_query (bool): Flag indicating whether to reread the file on each query
+        _lines (List[bytes]): Lines of the file stored as byte strings for searching
+
+    Methods:
+        _read_file(): Reads the file and stores each line as bytes in the _lines attribute
+        search(query): Searches for an exact match of the provided query string in the file
+        get_stats(): Returns timing statistics about the last search operation
+
+    Example:
+        >>> rs = RegexSearch('/path/to/file.txt')
+        >>> rs.search('pattern')
+        True
+        >>> rs.get_stats()
+        {'compile_time': 0.0001, 'search_time': 0.0023}
+    """
     def __init__(self, file_path: str, reread_on_query: bool = False):
         super().__init__(file_path)
         self.stats = {"compile_time": 0, "search_time": 0}
@@ -16,11 +51,16 @@ class RegexSearch(SearchAlgorithm):
         self._file_size = os.path.getsize(file_path)
         self._buffer_size = min(8192, self._file_size)
         self.reread_on_query = reread_on_query
+        self._lines: List[bytes] = []  # Initialize _lines as an empty list
         if not self.reread_on_query:
             self._read_file()
     
     def _read_file(self) -> None:
-        pass
+        """Read the file and populate the _lines attribute."""
+        self._lines = []
+        with open(self.file_path, 'rb') as f:
+            for line in f:
+                self._lines.append(line.rstrip())
     
     def search(self, query: str) -> bool:
         start_compile = time.time()
@@ -31,21 +71,10 @@ class RegexSearch(SearchAlgorithm):
         self.stats["compile_time"] = time.time() - start_compile
         
         start_search = time.time()
-        with open(self.file_path, 'rb') as f:
-            buffer = b''
-            while True:
-                chunk = f.read(self._buffer_size)
-                if not chunk:
-                    break
-                
-                buffer = buffer + chunk
-                lines = buffer.split(b'\n')
-                buffer = lines[-1]
-                
-                for line in lines[:-1]:
-                    if line.rstrip() == query_bytes:
-                        self.stats["search_time"] = time.time() - start_search
-                        return True
+        for line in self._lines:
+            if line == query_bytes:
+                self.stats["search_time"] = time.time() - start_search
+                return True
         
         self.stats["search_time"] = time.time() - start_search
         return False

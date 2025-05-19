@@ -8,7 +8,30 @@ import datrie
 from src.search.base import SearchAlgorithm
 
 class KMP(SearchAlgorithm):
+    """
+    KMP (Knuth-Morris-Pratt) string search algorithm implementation.
+    This class implements the KMP algorithm for efficient substring search within
+    a text file. It extends the `SearchAlgorithm` base class and provides methods
+    to preprocess the input file, compute the prefix table (LPS array), and perform
+    the search operation.
+    Attributes:
+        reread_on_query (bool): Determines whether the file should be re-read on
+            every search query. Defaults to False.
+        _cache (str): Cached content of the file.
+        _lines (List[str]): List of lines from the file.
+        _stats (dict): Dictionary to store statistics about the search process,
+            including the number of comparisons, search time, lines processed,
+            and prefix table computations.
+    """
     def __init__(self, file_path: str, reread_on_query: bool = False):
+        """
+        Initializes the KMP (Knuth-Morris-Pratt) search algorithm instance.
+
+        Args:
+            file_path (str): The path to the file that will be processed for search operations.
+            reread_on_query (bool, optional): If True, the file will be re-read on each query. 
+                Defaults to False.
+        """
         super().__init__(file_path)
         self.reread_on_query = reread_on_query
         self._cache = None
@@ -23,6 +46,9 @@ class KMP(SearchAlgorithm):
             self._read_file()
     
     def _read_file(self) -> None:
+        """
+        
+        """
         try:
             with open(self.file_path, 'r', encoding='utf-8') as file:
                 self._cache = file.read()
@@ -39,7 +65,7 @@ class KMP(SearchAlgorithm):
     
     def _compute_lps(self, pattern: str) -> List[int]:
         length = len(pattern)
-        lps = [0] * length  # lps[0] is always 0
+        lps = [0] * length 
         
         len_prev_lps = 0
         i = 1

@@ -79,6 +79,8 @@ class SearchClient:
                 response = sock.recv(1024).decode('utf-8').strip()
                 print(f"Response: {response}")
                 return response
+        except socket.error as e:
+            raise ValueError(f"Socket error occurred during search: {e}")
         except Exception as e:
             raise ValueError(f"Error during search: {e}")
 
