@@ -6,6 +6,21 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 
+class ConfigError(Exception):
+    """Base exception for configuration-related errors."""
+    pass
+
+
+class ConfigValidationError(ConfigError):
+    """Raised when configuration validation fails."""
+    pass
+
+
+class ConfigFileError(ConfigError):
+    """Raised when there are issues with the configuration file."""
+    pass
+
+
 class Config:
     """Manages server configuration and logging setup.
 
@@ -29,6 +44,9 @@ class Config:
         logger (Optional[logging.Logger]): Configured logger instance.
     """
 
+    VALID_LOG_LEVELS = {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'}
+    VALID_ALGORITHMS = {'simple', 'inmemory', 'binary', 'hash', 'regex', 'bloom', 'boyermoore', 'kmp', 'rabinkarp', 'grep'}
+
     def __init__(self, config_file: str = "src/config/server.conf") -> None:
         """Initializes the configuration from a file.
 
@@ -36,38 +54,165 @@ class Config:
             config_file: Path to the configuration INI file.
 
         Raises:
-            FileNotFoundError: If the config file does not exist.
-            ValueError: If required settings are missing or invalid.
+            ConfigFileError: If the config file does not exist or cannot be read.
+            ConfigValidationError: If required settings are missing or invalid.
         """
+        self.config_file = config_file
         self.config = configparser.ConfigParser()
-
-        if not os.path.exists(config_file):
-            raise FileNotFoundError(f"Configuration file {config_file} not found")
-
-        self.config.read(config_file)
-
-        server_config = self.config["SERVER"]
-        self.host: str = server_config.get("HOST", "localhost")
-        self.port: int = server_config.getint("PORT", 8080)
-        self.use_ssl: bool = server_config.getboolean("USE_SSL", False)
-        self.ssl_cert: Optional[str] = server_config.get("SSL_CERT")
-        self.ssl_key: Optional[str] = server_config.get("SSL_KEY")
-        self.workers: int = server_config.getint("WORKERS", 4)
-        self.debug: bool = server_config.getboolean("DEBUG", False)
-
-        search_config = self.config["SEARCH"]
-        self.linux_path: str = search_config.get("LINUX_PATH")
-        self.search_algorithm: str = search_config.get("ALGORITHM", "simple")
-        self.reread_on_query: bool = search_config.getboolean("REREAD_ON_QUERY")
-        self.case_sensitive: bool = search_config.getboolean("CASE_SENSITIVE")
-
-        logging_config = self.config["LOGGING"]
-        self.log_level: str = logging_config.get("level", "INFO")
-        self.log_file: Optional[str] = logging_config.get("file")
         self.logger: Optional[logging.Logger] = None
 
-        self._validate_config()
-        self._initiate_logger()
+        try:
+            self._load_config_file()
+            self._parse_configuration()
+            self._validate_config()
+            self._initiate_logger()
+        except (ConfigFileError, ConfigValidationError) as e:
+            raise
+        except Exception as e:
+            raise ConfigError(f"Unexpected error during configuration initialization: {e}") from e
+
+    def _load_config_file(self) -> None:
+        """Loads and parses the configuration file.
+        
+        Raises:
+            ConfigFileError: If file doesn't exist, can't be read, or has parsing errors.
+        """
+        if not os.path.exists(self.config_file):
+            raise ConfigFileError(f"Configuration file '{self.config_file}' not found")
+
+        if not os.access(self.config_file, os.R_OK):
+            raise ConfigFileError(f"Configuration file '{self.config_file}' is not readable")
+
+        try:
+            self.config.read(self.config_file)
+        except configparser.Error as e:
+            raise ConfigFileError(f"Failed to parse configuration file '{self.config_file}': {e}") from e
+        except Exception as e:
+            raise ConfigFileError(f"Unexpected error reading configuration file '{self.config_file}': {e}") from e
+
+        # Validate that required sections exist
+        required_sections = ['SERVER', 'SEARCH', 'LOGGING']
+        missing_sections = [section for section in required_sections if section not in self.config]
+        if missing_sections:
+            raise ConfigFileError(f"Missing required sections in config file: {missing_sections}")
+
+    def _get_required_int(self, section: str, key: str) -> int:
+        """Retrieves a required integer value from config.
+        
+        Args:
+            section: Configuration section name.
+            key: Key within the section.
+            
+        Returns:
+            Integer value.
+            
+        Raises:
+            ConfigValidationError: If value is missing or cannot be converted to int.
+        """
+        if section not in self.config or key not in self.config[section]:
+            raise ConfigValidationError(f"Required configuration '{section}.{key}' not found")
+        
+        value = self.config[section].get(key)
+        if not value or not value.strip():
+            raise ConfigValidationError(f"Required configuration '{section}.{key}' is empty")
+        
+        try:
+            return self.config[section].getint(key)
+        except ValueError as e:
+            raise ConfigValidationError(f"Invalid integer value for '{section}.{key}': '{value}'") from e
+
+    def _get_required_bool(self, section: str, key: str) -> bool:
+        """Retrieves a required boolean value from config.
+        
+        Args:
+            section: Configuration section name.
+            key: Key within the section.
+            
+        Returns:
+            Boolean value.
+            
+        Raises:
+            ConfigValidationError: If value is missing or cannot be converted to bool.
+        """
+        if section not in self.config or key not in self.config[section]:
+            raise ConfigValidationError(f"Required configuration '{section}.{key}' not found")
+        
+        value = self.config[section].get(key)
+        if not value or not value.strip():
+            raise ConfigValidationError(f"Required configuration '{section}.{key}' is empty")
+        
+        try:
+            return self.config[section].getboolean(key)
+        except ValueError as e:
+            raise ConfigValidationError(f"Invalid boolean value for '{section}.{key}': '{value}'. Use true/false, yes/no, or 1/0") from e
+
+    def _get_required_str(self, section: str, key: str) -> str:
+        """Retrieves a required string value from config.
+        
+        Args:
+            section: Configuration section name.
+            key: Key within the section.
+            
+        Returns:
+            String value.
+            
+        Raises:
+            ConfigValidationError: If value is missing or empty.
+        """
+        if section not in self.config or key not in self.config[section]:
+            raise ConfigValidationError(f"Required configuration '{section}.{key}' not found")
+        
+        value = self.config[section].get(key)
+        if not value or not value.strip():
+            raise ConfigValidationError(f"Required configuration '{section}.{key}' is empty")
+        
+        return value.strip()
+
+    def _get_optional_str(self, section: str, key: str) -> Optional[str]:
+        """Retrieves an optional string value from config.
+        
+        Args:
+            section: Configuration section name.
+            key: Key within the section.
+            
+        Returns:
+            String value or None if not present or empty.
+        """
+        if section not in self.config or key not in self.config[section]:
+            return None
+        
+        value = self.config[section].get(key)
+        if not value or not value.strip():
+            return None
+        
+        return value.strip()
+
+    def _parse_configuration(self) -> None:
+        """Parses all configuration values with strict validation."""
+        # Server configuration - all required
+        self.host = 'localhost'
+        self.port = self._get_required_int("SERVER", "PORT")
+        self.use_ssl = self._get_required_bool("SERVER", "USE_SSL")
+        self.workers = self._get_required_int("SERVER", "WORKERS")
+        self.debug = self._get_required_bool("SERVER", "DEBUG")
+        
+        # SSL configuration - required only if SSL is enabled
+        if self.use_ssl:
+            self.ssl_cert = self._get_required_str("SERVER", "SSL_CERT")
+            self.ssl_key = self._get_required_str("SERVER", "SSL_KEY")
+        else:
+            self.ssl_cert = self._get_optional_str("SERVER", "SSL_CERT")
+            self.ssl_key = self._get_optional_str("SERVER", "SSL_KEY")
+
+        # Search configuration - all required
+        self.linux_path = self._get_required_str("SEARCH", "LINUX_PATH")
+        self.search_algorithm = self._get_required_str("SEARCH", "ALGORITHM")
+        self.reread_on_query = self._get_required_bool("SEARCH", "REREAD_ON_QUERY")
+        self.case_sensitive = self._get_required_bool("SEARCH", "CASE_SENSITIVE")
+
+        # Logging configuration
+        self.log_level = self._get_required_str("LOGGING", "LEVEL")
+        self.log_file = self._get_optional_str("LOGGING", "FILE")  # Optional
 
     def _create_log_file(self, log_path: str) -> None:
         """Creates a log file and its directory structure if needed.
@@ -75,34 +220,95 @@ class Config:
         Args:
             log_path: Path to the log file.
 
-        Note:
-            Silently skips if the file already exists.
+        Raises:
+            ConfigError: If log file or directory cannot be created.
         """
-        directory = os.path.dirname(log_path)
-        if directory and not os.path.exists(directory):
-            os.makedirs(directory)
         try:
-            with open(log_path, "x", encoding="utf-8") as f:
-                pass
-        except FileExistsError:
-            pass
+            directory = os.path.dirname(log_path)
+            if directory:
+                if not os.path.exists(directory):
+                    os.makedirs(directory, mode=0o755)
+                elif not os.access(directory, os.W_OK):
+                    raise ConfigError(f"Log directory '{directory}' is not writable")
+                
+            if os.path.exists(log_path):
+                if not os.access(log_path, os.W_OK):
+                    raise ConfigError(f"Log file '{log_path}' is not writable")
+            else:
+                try:
+                    with open(log_path, "x", encoding="utf-8") as f:
+                        pass
+                except FileExistsError:
+                    pass
+                except PermissionError:
+                    raise ConfigError(f"Permission denied when creating log file '{log_path}'")
+                    
+        except OSError as e:
+            raise ConfigError(f"Failed to create log file or directory for '{log_path}': {e}") from e
 
     def _validate_config(self) -> None:
-        """Validates critical configuration settings.
+        """Validates all configuration settings strictly.
 
         Raises:
-            ValueError: If required settings are missing or invalid.
+            ConfigValidationError: If any settings are invalid.
         """
-        if not self.linux_path:
-            raise ValueError("Required 'search.linux_path' configuration not found")
+        if not (1 <= self.port <= 65535):
+            raise ConfigValidationError(f"Port must be between 1 and 65535, got: {self.port}")
 
+        if self.workers < 1:
+            raise ConfigValidationError(f"Workers must be at least 1, got: {self.workers}")
+        if self.workers > 10_000:
+            raise ConfigValidationError(f"Workers should not exceed 10 000, got: {self.workers}")
+
+        if not os.path.exists(self.linux_path):
+            raise ConfigValidationError(f"Search path does not exist: '{self.linux_path}'")
+        if not os.access(self.linux_path, os.R_OK):
+            raise ConfigValidationError(f"Search path is not readable: '{self.linux_path}'")
+        if not os.path.isfile(self.linux_path):
+            raise ConfigValidationError(f"Search path is not a file: '{self.linux_path}'")
+
+        # Validate search algorithm
+        if self.search_algorithm not in self.VALID_ALGORITHMS:
+            raise ConfigValidationError(
+                f"Invalid search algorithm '{self.search_algorithm}'. "
+                f"Valid options: {', '.join(sorted(self.VALID_ALGORITHMS))}"
+            )
+
+        # Validate SSL configuration when enabled
         if self.use_ssl:
-            if not self.ssl_cert or not self.ssl_key:
-                raise ValueError("SSL is enabled but cert_file or key_file is missing")
+            if not self.ssl_cert:
+                raise ConfigValidationError("SSL is enabled but SSL_CERT is missing or empty")
+            if not self.ssl_key:
+                raise ConfigValidationError("SSL is enabled but SSL_KEY is missing or empty")
+            
             if not os.path.exists(self.ssl_cert):
-                raise ValueError(f"SSL certificate file not found: {self.ssl_cert}")
+                raise ConfigValidationError(f"SSL certificate file not found: '{self.ssl_cert}'")
+            if not os.access(self.ssl_cert, os.R_OK):
+                raise ConfigValidationError(f"SSL certificate file is not readable: '{self.ssl_cert}'")
+            if not os.path.isfile(self.ssl_cert):
+                raise ConfigValidationError(f"SSL certificate path is not a file: '{self.ssl_cert}'")
+                
             if not os.path.exists(self.ssl_key):
-                raise ValueError(f"SSL key file not found: {self.ssl_key}")
+                raise ConfigValidationError(f"SSL key file not found: '{self.ssl_key}'")
+            if not os.access(self.ssl_key, os.R_OK):
+                raise ConfigValidationError(f"SSL key file is not readable: '{self.ssl_key}'")
+            if not os.path.isfile(self.ssl_key):
+                raise ConfigValidationError(f"SSL key path is not a file: '{self.ssl_key}'")
+
+        # Validate log level
+        if self.log_level.upper() not in self.VALID_LOG_LEVELS:
+            raise ConfigValidationError(
+                f"Invalid log level '{self.log_level}'. "
+                f"Valid options: {', '.join(sorted(self.VALID_LOG_LEVELS))}"
+            )
+
+        # Validate log file if specified
+        if self.log_file:
+            log_dir = os.path.dirname(self.log_file)
+            if log_dir and not os.path.exists(log_dir):
+                parent_dir = os.path.dirname(log_dir)
+                if parent_dir and not os.path.exists(parent_dir):
+                    raise ConfigValidationError(f"Log file parent directory does not exist: '{parent_dir}'")
 
     def _initiate_logger(self) -> None:
         """Initializes the logger with console and file handlers.
@@ -112,23 +318,35 @@ class Config:
             - Console handler (stderr).
             - File handler (if `log_file` is specified).
             - Log rotation (10MB per file, max 3 backups).
+            
+        Raises:
+            ConfigError: If logger setup fails.
         """
-        log_format = "%(asctime)s [%(levelname)s] %(message)s"
+        log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
         formatter = logging.Formatter(log_format)
 
-        log_level = getattr(logging, self.log_level.upper(), logging.INFO)
+        try:
+            log_level = getattr(logging, self.log_level.upper())
+        except AttributeError:
+            raise ConfigError(f"Invalid log level: {self.log_level}")
 
         self.logger = logging.getLogger("SearchServer")
         self.logger.setLevel(log_level)
 
+        # Clear existing handlers to avoid duplicates
         if self.logger.hasHandlers():
             self.logger.handlers.clear()
 
-        console_handler = logging.StreamHandler(sys.stderr)
-        console_handler.setFormatter(formatter)
-        console_handler.setLevel(log_level)
-        self.logger.addHandler(console_handler)
+        # Console handler setup 
+        try:
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setFormatter(formatter)
+            console_handler.setLevel(log_level)
+            self.logger.addHandler(console_handler)
+        except Exception as e:
+            raise ConfigError(f"Failed to initialize console logging: {e}") from e
 
+        # File handler setup - optional but must work if specified
         if self.log_file:
             try:
                 self._create_log_file(self.log_file)
@@ -141,9 +359,9 @@ class Config:
                 file_handler.setFormatter(formatter)
                 file_handler.setLevel(log_level)
                 self.logger.addHandler(file_handler)
+                self.logger.info(f"File logging initialized: {self.log_file}")
             except Exception as e:
-                self.logger.error("Failed to initialize file logging: %s", str(e))
-                self.logger.warning("Continuing with console logging only")
+                raise ConfigError(f"Failed to initialize file logging for '{self.log_file}': {e}") from e
 
     def get(self, section: str, key: str) -> Any:
         """Retrieves a raw value from the configuration.
@@ -154,7 +372,12 @@ class Config:
 
         Returns:
             The value as a string (or None if not found).
+            
+        Raises:
+            ConfigError: If section doesn't exist.
         """
+        if section not in self.config:
+            raise ConfigError(f"Configuration section '{section}' not found")
         return self.config[section].get(key)
 
     def __str__(self) -> str:
@@ -163,17 +386,53 @@ class Config:
             f"Config(host='{self.host}', port={self.port}, "
             f"workers={self.workers}, debug={self.debug}, "
             f"use_ssl={self.use_ssl}, linux_path='{self.linux_path}', "
+            f"algorithm='{self.search_algorithm}', "
             f"reread_on_query={self.reread_on_query})"
         )
 
-    def save(self, config_file: str) -> None:
+    def save(self, config_file: Optional[str] = None) -> None:
         """Saves the current configuration to a file.
 
         Args:
-            config_file: Path to the output INI file.
+            config_file: Path to the output INI file. If None, uses original config file.
+            
+        Raises:
+            ConfigError: If file cannot be written.
         """
-        with open(config_file, "w", encoding="utf-8") as f:
-            self.config.write(f)
+        target_file = config_file or self.config_file
+        
+        try:
+            # Test write permissions first
+            directory = os.path.dirname(target_file)
+            if directory:
+                if not os.path.exists(directory):
+                    os.makedirs(directory, mode=0o755)
+                elif not os.access(directory, os.W_OK):
+                    raise ConfigError(f"Directory '{directory}' is not writable")
+            
+            # Create backup if file exists
+            if os.path.exists(target_file):
+                if not os.access(target_file, os.W_OK):
+                    raise ConfigError(f"Config file '{target_file}' is not writable")
+                
+                backup_file = f"{target_file}.backup"
+                try:
+                    import shutil
+                    shutil.copy2(target_file, backup_file)
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"Failed to create backup of config file: {e}")
+            
+            with open(target_file, "w", encoding="utf-8") as f:
+                self.config.write(f)
+                
+            if self.logger:
+                self.logger.info(f"Configuration saved to: {target_file}")
+                
+        except PermissionError as e:
+            raise ConfigError(f"Permission denied when writing to config file '{target_file}': {e}") from e
+        except OSError as e:
+            raise ConfigError(f"Failed to save configuration file '{target_file}': {e}") from e
     
     def remove_option(self, section: str, key: str) -> None:
         """Removes a key from the configuration.
@@ -181,9 +440,43 @@ class Config:
         Args:
             section: INI section name.
             key: Key within the section.
+            
+        Raises:
+            ConfigError: If section or key doesn't exist, or file cannot be saved.
         """
-        if section in self.config and key in self.config[section]:
+        if section not in self.config:
+            raise ConfigError(f"Configuration section '{section}' not found")
+            
+        if key not in self.config[section]:
+            raise ConfigError(f"Key '{key}' not found in section '{section}'")
+        
+        try:
             del self.config[section][key]
-            self.save(self.config_file)
-        else:
-            raise KeyError(f"Key '{key}' not found in section '{section}'")
+            self.save()
+            if self.logger:
+                self.logger.info(f"Removed configuration option: {section}.{key}")
+        except Exception as e:
+            raise ConfigError(f"Failed to remove configuration option '{section}.{key}': {e}") from e
+
+    def reload(self) -> None:
+        """Reloads configuration from the original file.
+        
+        Raises:
+            ConfigFileError: If file cannot be reloaded.
+            ConfigValidationError: If reloaded config is invalid.
+        """
+        try:
+            old_config = self.config
+            old_logger = self.logger
+            
+            # Reinitialize
+            self.__init__(self.config_file)
+            
+            if self.logger:
+                self.logger.info("Configuration reloaded successfully")
+                
+        except Exception as e:
+            # Restore previous state if reload fails
+            self.config = old_config
+            self.logger = old_logger
+            raise ConfigError(f"Failed to reload configuration: {e}") from e

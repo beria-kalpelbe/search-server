@@ -51,28 +51,21 @@ class RegexSearch(SearchAlgorithm):
         self._file_size = os.path.getsize(file_path)
         self._buffer_size = min(8192, self._file_size)
         self.reread_on_query = reread_on_query
-        self._lines: List[bytes] = []  # Initialize _lines as an empty list
         if not self.reread_on_query:
             self._read_file()
     
-    def _read_file(self) -> None:
-        """Read the file and populate the _lines attribute."""
-        self._lines = []
-        with open(self.file_path, 'rb') as f:
-            for line in f:
-                self._lines.append(line.rstrip())
+
     
     def search(self, query: str) -> bool:
         start_compile = time.time()
         super().search(query)
         if self.reread_on_query:
             self._read_file()
-        query_bytes = query.encode('utf-8')
         self.stats["compile_time"] = time.time() - start_compile
         
         start_search = time.time()
         for line in self._lines:
-            if line == query_bytes:
+            if line == query:
                 self.stats["search_time"] = time.time() - start_search
                 return True
         

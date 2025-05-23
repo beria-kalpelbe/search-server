@@ -22,7 +22,6 @@ class RabinKarp(SearchAlgorithm):
 
     Attributes:
         reread_on_query (bool): Flag indicating whether to reread the file on each query
-        _cache (str): Content of the file cached in memory
         _lines (List[str]): Lines of the file stored for searching
         _stats (Dict): Dictionary tracking search statistics including comparisons,
                     time elapsed, lines processed, and hash collisions
@@ -47,8 +46,6 @@ class RabinKarp(SearchAlgorithm):
     def __init__(self, file_path: str, reread_on_query: bool = False, base: int = 256, prime: int = 101):
         super().__init__(file_path)
         self.reread_on_query = reread_on_query
-        self._cache = None
-        self._lines = []
         self._stats = {
             "comparisons": 0,
             "time_elapsed": 0,
@@ -60,20 +57,6 @@ class RabinKarp(SearchAlgorithm):
         if not self.reread_on_query:
             self._read_file()
     
-    def _read_file(self) -> None:
-        try:
-            with open(self.file_path, 'r', encoding='utf-8') as file:
-                self._cache = file.read()
-                self._lines = self._cache.split('\n')
-                self._stats["lines_processed"] = len(self._lines)
-        except FileNotFoundError:
-            print(f"Error: File '{self.file_path}' not found.")
-            self._cache = ""
-            self._lines = []
-        except Exception as e:
-            print(f"Error reading file: {str(e)}")
-            self._cache = ""
-            self._lines = []
     
     def _calculate_hash(self, string: str, length: int) -> int:
         hash_value = 0
@@ -99,9 +82,6 @@ class RabinKarp(SearchAlgorithm):
         start_time = time.time()
         super().search(query)
         if self.reread_on_query:
-            self._read_file()
-        
-        if not self._cache:
             self._read_file()
         
         self._stats["comparisons"] = 0

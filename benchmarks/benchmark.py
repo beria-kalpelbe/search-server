@@ -5,7 +5,6 @@ import string
 from typing import List, Type, Dict
 import pandas as pd
 import matplotlib.pyplot as plt
-from src.search.base import SearchAlgorithm
 from src.search.algorithms.simple import SimpleSearch
 from src.search.algorithms.inmemory import InMemorySearch
 from src.search.algorithms.binary import BinarySearch
@@ -15,7 +14,7 @@ from src.search.algorithms.bloomfilter import BloomFilterSearch
 from src.search.algorithms.boyermoore import BoyerMoore
 from src.search.algorithms.rabinkarp import RabinKarp
 from src.search.algorithms.kmp import KMP
-from src.client import SearchClient
+from src.search.algorithms.grep import GrepSearch
 import tracemalloc
 
 
@@ -32,6 +31,7 @@ class Benchmark:
             "BoyerMoore": BoyerMoore,
             "RabinKarp": RabinKarp,
             "KMP": KMP,
+            "GrepSearch": GrepSearch,
         }
         self.results: Dict[str, List[Dict]] = {}
         os.makedirs(output_dir, exist_ok=True)
@@ -67,7 +67,7 @@ class Benchmark:
         current_step = 0
         
         for size in file_sizes:
-            filename = f"test_{size}.txt"
+            filename = f"bench_{size}.txt"
             filepath = self.generate_test_file(size, filename)
             for algo_name, algo_class in self.algorithms.items():
                 current_step += 1
@@ -93,7 +93,7 @@ class Benchmark:
                     "throughput": self.measure_throughput(algo.search, queries),
                 }
                 self.results[algo_name].append(stats)
-                algo.cleanup()
+                # algo.cleanup() 
         
         print("\nBenchmark completed.")
     
@@ -130,7 +130,7 @@ class Benchmark:
             xlabel="File Size (lines)",
             ylabel="Average Search Time (ms)",
             title="Search Time vs File Size",
-            filename=os.path.join(self.output_dir, "benchmark_results.png"),
+            filename=os.path.join(self.output_dir, "time-speed.png"),
             log_scale_x=False,
             log_scale_y=True
         )

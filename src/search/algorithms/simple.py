@@ -59,8 +59,6 @@ class SimpleSearch(SearchAlgorithm):
         if not self.reread_on_query:
             self._read_file()
     
-    def _read_file(self) -> None:
-        pass
     
     def search(self, query: str) -> Iterator[bool]:
         start_time = time.time()
@@ -68,23 +66,12 @@ class SimpleSearch(SearchAlgorithm):
             self._read_file()
         self.stats["comparisons"] = 0
         query_bytes = query.encode('utf-8') + b'\n'
-        
-        with open(self.file_path, 'rb') as f:
-            buffer = b''
-            while True:
-                chunk = f.read(self._buffer_size)
-                if not chunk:
-                    break
-                
-                buffer = buffer + chunk
-                lines = buffer.split(b'\n')
-                buffer = lines[-1]
-                
-                for line in lines[:-1]:
-                    self.stats["comparisons"] += 1
-                    if line == query_bytes.rstrip():
-                        self.stats["time_taken"] = time.time() - start_time
-                        return True
+
+        for line in self._lines[:-1]:
+            self.stats["comparisons"] += 1
+            if line == query_bytes.rstrip():
+                self.stats["time_taken"] = time.time() - start_time
+                return True
         self.stats["time_taken"] = time.time() - start_time
         return False
     

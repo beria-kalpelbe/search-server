@@ -18,7 +18,6 @@ class SearchAlgorithm(ABC):
 
     Attributes:
         file_path (str): Path to the file that will be searched
-        _cache (Optional): Storage for cached file content, implementation-specific
         reread_on_query (bool): Flag indicating whether to reread the file on each query
 
     Abstract Methods:
@@ -47,7 +46,8 @@ class SearchAlgorithm(ABC):
     """
     def __init__(self, file_path: str):
         self.file_path = file_path
-        self._cache = None
+        self._last_modified: float = 0.0
+        self._lines = []
         self.reread_on_query = False
     
     @abstractmethod
@@ -64,6 +64,36 @@ class SearchAlgorithm(ABC):
     def get_stats(self) -> dict:
         pass
     
-    def cleanup(self) -> None:
-        if hasattr(self, '_cache'):
-            self._cache = None 
+    
+    def _read_file(self) -> None:
+        """
+        Read the file and load its content into memory.
+        
+        This method reads the file specified by `file_path`, decodes its lines,
+        and stores them in the `_lines` set.
+        """
+        import os
+        
+        # Check if file has been modified since last read
+        try:
+            current_mtime = os.path.getmtime(self.file_path)
+            if self._lines and current_mtime <= self._last_modified:
+                # File hasn't changed, no need to reload
+                return
+            self._last_modified = current_mtime
+        except (FileNotFoundError, OSError):
+            # Will be handled in the file opening block
+            pass
+                
+        try:
+            # Use a buffer size that balances memory usage and performance
+            buffer_size = 8 * 1024 * 1024  # 8MB buffer
+            with open(self.file_path, 'rb', buffering=buffer_size) as file:
+                # Use a list comprehension instead of a set comprehension for better speed
+                # when dealing with a large number of lines
+                self._lines = [line.rstrip().decode('utf-8', errors='replace') for line in file]
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File not found: {self.file_path}")
+        except Exception as e:
+            raise RuntimeError(f"Error reading file: {e}")
+        

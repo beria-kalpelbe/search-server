@@ -111,6 +111,7 @@ FILE = logs/server.log
 | `boyermoore` | Boyer-Moore search                                  | Text processing                    |
 | `kmp`        | Knuth-Morris-Pratt search                           | Partial string matching            |
 | `rabinkarp`  | Rabin-Karp search                                   | Multiple pattern searching         |
+| `grep`       | Leverages the `grep` command-line tool for search   | High-performance file scanning     |
 
 ## Testing
 

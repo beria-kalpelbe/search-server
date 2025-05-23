@@ -17,7 +17,6 @@ class KMP(SearchAlgorithm):
     Attributes:
         reread_on_query (bool): Determines whether the file should be re-read on
             every search query. Defaults to False.
-        _cache (str): Cached content of the file.
         _lines (List[str]): List of lines from the file.
         _stats (dict): Dictionary to store statistics about the search process,
             including the number of comparisons, search time, lines processed,
@@ -34,8 +33,6 @@ class KMP(SearchAlgorithm):
         """
         super().__init__(file_path)
         self.reread_on_query = reread_on_query
-        self._cache = None
-        self._lines = []
         self._stats = {
             "comparisons": 0,
             "search_time": 0,
@@ -45,23 +42,6 @@ class KMP(SearchAlgorithm):
         if not self.reread_on_query:
             self._read_file()
     
-    def _read_file(self) -> None:
-        """
-        
-        """
-        try:
-            with open(self.file_path, 'r', encoding='utf-8') as file:
-                self._cache = file.read()
-                self._lines = self._cache.split('\n')
-                self._stats["lines_processed"] = len(self._lines)
-        except FileNotFoundError:
-            print(f"Error: File '{self.file_path}' not found.")
-            self._cache = ""
-            self._lines = []
-        except Exception as e:
-            print(f"Error reading file: {str(e)}")
-            self._cache = ""
-            self._lines = []
     
     def _compute_lps(self, pattern: str) -> List[int]:
         length = len(pattern)
@@ -114,9 +94,6 @@ class KMP(SearchAlgorithm):
         start_time = time.time()
         super().search(query)
         if self.reread_on_query:
-            self._read_file()
-        
-        if not self._cache:
             self._read_file()
         
         self._stats["comparisons"] = 0

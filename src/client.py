@@ -42,22 +42,24 @@ class SearchClient:
         Raises:
             Exception: If the connection fails.
         """
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if self.use_ssl:
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                context.maximum_version = ssl.TLSVersion.TLSv1_3
 
-        if self.use_ssl:
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            context.minimum_version = ssl.TLSVersion.TLSv1_2
-            context.maximum_version = ssl.TLSVersion.TLSv1_3
-
-            if self.cert_path:
-                context.load_verify_locations(self.cert_path)
-            else:
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-
-            sock = context.wrap_socket(sock, server_hostname=self.host)
-
-        sock.connect((self.host, self.port))
+                if self.cert_path:
+                    context.load_verify_locations(self.cert_path)
+                else:
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
+                sock = context.wrap_socket(sock, server_hostname=self.host)
+            sock.connect((self.host, self.port))
+        except (ssl.SSLError, ConnectionResetError) as e:
+            sock.close()
+            print(f"SSL error: {e}")
+            raise ValueError(f"SSL handshake failed - {e}")
         return sock
 
     def search(self, query: str) -> str:
@@ -77,10 +79,9 @@ class SearchClient:
             with self.create_connection() as sock:
                 sock.sendall(f"{query}\n".encode('utf-8'))
                 response = sock.recv(1024).decode('utf-8').strip()
-                print(f"Response: {response}")
                 return response
         except socket.error as e:
-            raise ValueError(f"Socket error occurred during search: {e}")
+            raise ValueError(e)
         except Exception as e:
             raise ValueError(f"Error during search: {e}")
 
@@ -104,7 +105,7 @@ def run_concurrent_searches(client: SearchClient, queries: List[str], num_thread
             query = future_to_query[future]
             try:
                 found = future.result()
-                print(f"Query '{query}': {found}")
+                print(f"Query '{query}' => {found}")
             except Exception as e:
                 print(f"Query '{query}' generated an exception: {e}")
 
@@ -120,7 +121,7 @@ def main() -> None:
     parser.add_argument('--no-ssl', action='store_true', help='Disable SSL')
     parser.add_argument('--cert', help='Path to server certificate for verification')
     parser.add_argument('--queries', nargs='+', default=['test'], help='Search queries to send')
-    parser.add_argument('--threads', type=int, default=10, help='Number of concurrent threads')
+    parser.add_argument('--threads', type=int, default=100, help='Number of concurrent threads')
 
     args = parser.parse_args()
 

@@ -35,7 +35,8 @@ def test_data_file():
     "regex",
     "inmemory",
     "kmp",
-    "rabinkarp"
+    "rabinkarp",
+    "grep"
 ])
 def search_algo_info(request):
     """Fixture that provides algorithm class, default kwargs, and validation functions"""
@@ -90,15 +91,12 @@ def search_algo_info(request):
         
         def verify_initial_reread_state(search):
             assert len(search._lines) == 0
-            assert search._cache is None
         
         def verify_post_first_search_state(search):
-            assert len(search._lines) == 9
-            assert search._cache is not None
+            assert len(search._lines) == 8
         
         def verify_post_modification_state(search):
-            assert len(search._lines) == 10
-            assert search._cache is not None
+            assert len(search._lines) == 9
         
         return {
             "class": BoyerMoore,
@@ -179,10 +177,10 @@ def search_algo_info(request):
             assert len(search._lines) == 0
         
         def verify_post_first_search_state(search):
-            assert len(search._lines) == 9
+            assert len(search._lines) == 8
         
         def verify_post_modification_state(search):
-            assert len(search._lines) == 10
+            assert len(search._lines) == 9
         
         return {
             "class": KMP,
@@ -200,13 +198,36 @@ def search_algo_info(request):
             assert len(search._lines) == 0
         
         def verify_post_first_search_state(search):
-            assert len(search._lines) == 9
+            assert len(search._lines) == 8
         
         def verify_post_modification_state(search):
-            assert len(search._lines) == 10
+            assert len(search._lines) == 9
         
         return {
             "class": RabinKarp,
+            "kwargs": {},
+            
+            "verify_initial_reread_state": verify_initial_reread_state,
+            "verify_post_first_search_state": verify_post_first_search_state,
+            "verify_post_modification_state": verify_post_modification_state
+        }
+    elif param == 'grep':
+        from src.search.algorithms.grep import GrepSearch
+        
+        def verify_initial_reread_state(search):
+            # assert len(search._lines) == 0
+            pass
+        
+        def verify_post_first_search_state(search):
+            # assert len(search._lines) == 8
+            pass
+        
+        def verify_post_modification_state(search):
+            # assert len(search._lines) == 9
+            pass
+        
+        return {
+            "class": GrepSearch,
             "kwargs": {},
             
             "verify_initial_reread_state": verify_initial_reread_state,

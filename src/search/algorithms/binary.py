@@ -1,9 +1,9 @@
 import os
 import time
 from typing import List
+from src.search.base import SearchAlgorithm
 
-
-class BinarySearch:
+class BinarySearch(SearchAlgorithm):
     """
     Binary Search Algorithm.
 
@@ -28,27 +28,21 @@ class BinarySearch:
         self.file_path = file_path
         self.reread_on_query = reread_on_query
         self.stats = {"comparisons": 0, "time_taken": 0.0}
+        self._lines = []
         self._sorted_lines: List[str] = []
 
         if not self.reread_on_query:
-            self._read_file()
+            self._read_and_sort_file()
 
-    def _read_file(self) -> None:
+    def _read_and_sort_file(self) -> None:
         """
         Read and sort the lines from the file.
 
         This method reads the file specified by `file_path`, decodes its lines,
         and stores them in `_sorted_lines` in sorted order.
         """
-        try:
-            with open(self.file_path, 'rb') as file:
-                self._sorted_lines = sorted(
-                    line.rstrip().decode('utf-8') for line in file
-                )
-        except FileNotFoundError:
-            raise FileNotFoundError(f"File not found: {self.file_path}")
-        except Exception as e:
-            raise RuntimeError(f"Error reading file: {e}")
+        self._read_file()
+        self._sorted_lines = sorted(self._lines)
 
     def search(self, query: str) -> bool:
         """
@@ -64,7 +58,7 @@ class BinarySearch:
         self.stats["comparisons"] = 0
 
         if self.reread_on_query:
-            self._read_file()
+            self._read_and_sort_file()
 
         left, right = 0, len(self._sorted_lines) - 1
         while left <= right:
