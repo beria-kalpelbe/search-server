@@ -9,45 +9,29 @@ from src.search.base import SearchAlgorithm
 
 class SimpleSearch(SearchAlgorithm):    
     """
-    SimpleSearch Algorithm Implementation for String Search
+    A basic line-by-line search implementation optimized for sequential file scanning.
 
-    This class implements a basic line-by-line search algorithm that extends the
-    SearchAlgorithm base class. It performs exact matching between lines in the file
-    and the provided query string, using an efficient buffered reading approach.
-
-    The search reads the file in chunks of a specified buffer size, processes complete
-    lines from the buffer, and carries over any incomplete line to the next iteration.
-    Each complete line is compared directly to the query after encoding to bytes.
+    This class provides a straightforward search algorithm that reads the file line by line,
+    comparing each line directly with the query string. While simple in approach, it can be
+    efficient for small files or when memory usage needs to be minimized.
 
     Args:
-        file_path (str): Path to the file to search in
-        reread_on_query (bool, optional): Whether to reread the file for each query. Defaults to False.
+        file_path (str): Path to the file to search.
+        reread_on_query (bool, optional): Whether to reread the file for each query.
+            Defaults to False.
 
     Attributes:
-        stats (Dict): Dictionary tracking search performance statistics including comparison count
-                    and total time taken
+        stats (Dict): Performance statistics including:
+            - comparisons: Number of line comparisons performed
+            - time_taken: Total search execution time in seconds
         _file_size (int): Size of the target file in bytes
-        _buffer_size (int): Buffer size for file reading, capped at 8192 bytes or file size
-        reread_on_query (bool): Flag indicating whether to reread the file on each query
-
-    Methods:
-        _read_file(): Placeholder method (not implemented in current version)
-        search(query): Searches for an exact match of the provided query string in the file
-        get_stats(): Returns statistics about the last search operation
-
-    Implementation Details:
-        The search method uses a buffered reading approach where:
-        1. The file is read in chunks of _buffer_size bytes
-        2. Lines are extracted from the buffer by splitting on newline characters
-        3. The last (potentially incomplete) line is carried over to the next buffer
-        4. Each complete line is compared to the query
-        5. Search returns True immediately upon finding a match
+        _buffer_size (int): Buffer size for file reading operations
+        reread_on_query (bool): Flag controlling file rereading behavior
 
     Example:
-        >>> ss = SimpleSearch('/path/to/file.txt')
-        >>> ss.search('pattern')
-        True
-        >>> ss.get_stats()
+        >>> searcher = SimpleSearch('data.txt')
+        >>> found = searcher.search('example text')
+        >>> print(searcher.get_stats())
         {'comparisons': 42, 'time_taken': 0.0015}
     """
     def __init__(self, file_path: str, reread_on_query: bool = False):
@@ -59,8 +43,20 @@ class SimpleSearch(SearchAlgorithm):
         if not self.reread_on_query:
             self._read_file()
     
-    
     def search(self, query: str) -> Iterator[bool]:
+        """
+        Performs a line-by-line search for the query string.
+
+        Args:
+            query (str): The string to search for in the file.
+
+        Returns:
+            bool: True if the query is found, False otherwise.
+
+        Note:
+            The search is case-sensitive and matches complete lines only.
+            Performance statistics are updated after each search operation.
+        """
         start_time = time.time()
         if self.reread_on_query:
             self._read_file()
@@ -76,4 +72,12 @@ class SimpleSearch(SearchAlgorithm):
         return False
     
     def get_stats(self) -> dict:
+        """
+        Retrieves the current search statistics.
+
+        Returns:
+            dict: A dictionary containing performance metrics:
+                - comparisons: Number of line comparisons performed
+                - time_taken: Total search execution time in seconds
+        """
         return self.stats
