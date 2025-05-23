@@ -8,7 +8,7 @@ from benchmarks.benchmark import Benchmark
 
 def main():
     parser = argparse.ArgumentParser(description="Run search algorithm benchmarks")
-    parser.add_argument("--sizes", type=int, nargs="+", default=list(range(10_000, 1_000_001, 100_000)),
+    parser.add_argument("--sizes", type=int, nargs="+", default=list(range(10_000, 1_000_001, 200_000)),
                       help="File sizes to test (from 10 to 10^6 with step 50)")
     parser.add_argument("--output-dir", default="benchmark_results",
                       help="Directory for benchmark results")
@@ -22,11 +22,11 @@ def main():
         "performance",
         "benchmark",
         "algorithm",
-        "search string",
-        "nonexistent",
-        "quick brown fox",
-        "python programming",
-        "data structures"
+        # "search string",
+        # "nonexistent",
+        # "quick brown fox",
+        # "python programming",
+        # "data structures"
     ]
     
     benchmark = Benchmark(args.output_dir)

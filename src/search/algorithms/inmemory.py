@@ -18,7 +18,7 @@ class InMemorySearch(SearchAlgorithm):
         _last_modified (float): Timestamp of last file modification.
     """
     
-    def __init__(self, file_path: str, reread_on_query: bool = False) -> None:
+    def __init__(self, file_path: str, reread_on_query: bool = False, case_sensitive: bool = True) -> None: 
         """
         Initialize the InMemorySearch instance.
         
@@ -30,6 +30,7 @@ class InMemorySearch(SearchAlgorithm):
         self.stats: Dict[str, float] = {"load_time": 0.0, "search_time": 0.0}
         self._lines: Set[str] = set()
         self.reread_on_query = reread_on_query
+        self.case_sensitive = case_sensitive
         self._last_modified: float = 0.0
         
         # Load file on initialization if not rereading on each query
@@ -48,7 +49,9 @@ class InMemorySearch(SearchAlgorithm):
             bool: True if the query is found, False otherwise.
         """
         start_time = time.time()
-        
+        if not self.case_sensitive:
+            query = query.lower()
+            
         if self.reread_on_query:
             self._read_file()
         

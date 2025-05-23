@@ -44,13 +44,14 @@ class RegexSearch(SearchAlgorithm):
         >>> rs.get_stats()
         {'compile_time': 0.0001, 'search_time': 0.0023}
     """
-    def __init__(self, file_path: str, reread_on_query: bool = False):
+    def __init__(self, file_path: str, reread_on_query: bool = False, case_sensitive: bool = True) -> None:
         super().__init__(file_path)
         self.stats = {"compile_time": 0, "search_time": 0}
         self._pattern: Optional[re.Pattern] = None
         self._file_size = os.path.getsize(file_path)
         self._buffer_size = min(8192, self._file_size)
         self.reread_on_query = reread_on_query
+        self.case_sensitive = case_sensitive
         if not self.reread_on_query:
             self._read_file()
     
@@ -65,6 +66,9 @@ class RegexSearch(SearchAlgorithm):
         
         start_search = time.time()
         for line in self._lines:
+            if not self.case_sensitive:
+                line = line.lower()
+                query = query.lower()
             if line == query:
                 self.stats["search_time"] = time.time() - start_search
                 return True

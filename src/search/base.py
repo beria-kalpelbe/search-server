@@ -22,10 +22,11 @@ class SearchAlgorithm(ABC):
         Concrete implementations must override the abstract methods and may add
         additional functionality specific to their search strategy.
     """
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str, case_sensitive: bool = True) -> None:
         self.file_path = file_path
         self._last_modified: float = 0.0
         self._lines = []
+        self.case_sensitive = case_sensitive
         self.reread_on_query = False
     
     @abstractmethod
@@ -39,7 +40,7 @@ class SearchAlgorithm(ABC):
         pass
     
     @abstractmethod
-    def search(self, query: str) -> Iterator[str]:
+    def search(self, query: str) -> bool:
         """
         Performs a search operation for the given query.
 
@@ -47,7 +48,7 @@ class SearchAlgorithm(ABC):
             query (str): The string to search for.
 
         Returns:
-            Iterator[str]: An iterator of search results.
+            bool: True if the query was found, False otherwise.
 
         Note:
             Implementations should handle file rereading if reread_on_query is True.
@@ -93,7 +94,11 @@ class SearchAlgorithm(ABC):
         try:
             buffer_size = 8 * 1024 * 1024  # 8MB buffer for optimal I/O
             with open(self.file_path, 'rb', buffering=buffer_size) as file:
-                self._lines = [line.rstrip().decode('utf-8', errors='replace') 
+                if not self.case_sensitive:
+                    self._lines = [line.rstrip().decode('utf-8', errors='replace').lower() 
+                             for line in file]
+                else:
+                    self._lines = [line.rstrip().decode('utf-8', errors='replace') 
                              for line in file]
         except FileNotFoundError:
             raise FileNotFoundError(f"File not found: {self.file_path}")

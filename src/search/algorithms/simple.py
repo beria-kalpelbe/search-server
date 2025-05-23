@@ -25,6 +25,8 @@ class SimpleSearch(SearchAlgorithm):
         file_path (str): Path to the file to search.
         reread_on_query (bool, optional): Whether to reread the file for each query.
             Defaults to False.
+        case_sensitive (bool, optional): Whether the search should be case-sensitive.
+            Defaults to True.
 
     Attributes:
         stats (Dict): Performance statistics including:
@@ -44,16 +46,17 @@ class SimpleSearch(SearchAlgorithm):
         This implementation ensures exact matches only - no partial matches are returned.
         Lines are compared as complete strings after stripping whitespace.
     """
-    def __init__(self, file_path: str, reread_on_query: bool = False):
+    def __init__(self, file_path: str, reread_on_query: bool = False, case_sensitive: bool = True) -> None:
         super().__init__(file_path)
         self.stats = {"comparisons": 0, "time_taken": 0}
         self._file_size = os.path.getsize(file_path)
         self._buffer_size = min(8192, self._file_size)  # Optimal buffer size for most filesystems
         self.reread_on_query = reread_on_query
+        self.case_sensitive = case_sensitive
         if not self.reread_on_query:
             self._read_file()
     
-    def search(self, query: str) -> Iterator[bool]:
+    def search(self, query: str) -> bool:
         """
         Performs a line-by-line search for the query string.
 
@@ -85,11 +88,12 @@ class SimpleSearch(SearchAlgorithm):
             self.stats["time_taken"] = time.time() - start_time
             return False
 
-        query_bytes = query.encode('utf-8') + b'\n'
-
         for line in self._lines[:-1]:  # Exclude last line if empty
             self.stats["comparisons"] += 1
-            if line == query_bytes.rstrip():  # Compare without trailing newline
+            if not self.case_sensitive:
+                # line = line.lower()
+                query = query.lower()
+            if line == query.rstrip():  # Compare without trailing newline
                 self.stats["time_taken"] = time.time() - start_time
                 return True
                 

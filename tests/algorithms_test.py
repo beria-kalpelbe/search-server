@@ -19,6 +19,9 @@ def test_data_file():
         "honeydew"
     ]
     
+    if os.path.exists(test_file):
+        os.remove(test_file)
+    
     with open(test_file, 'wb') as f:
         for item in test_data:
             f.write(f"{item}\n".encode('utf-8'))
@@ -280,20 +283,21 @@ def test_search_with_reread(test_data_file, search_algo_info):
     verify_first = search_algo_info["verify_post_first_search_state"]
     verify_modification = search_algo_info["verify_post_modification_state"]
     
-    if search_class.__name__ == "HashSearch":
-        search = search_class(test_file, True)
-    else:
-        kwargs = search_algo_info["kwargs"]
-        search = search_class(test_file, reread_on_query=True, **kwargs)
+    search = search_class(test_file, reread_on_query=True)
     
     verify_initial(search)
     
     assert search.search("banana") is True
     verify_first(search)
     
+    # Write new data and ensure it's flushed to disk
     with open(test_file, 'ab') as f:
         f.write(b"kiwi\n")
+        f.flush()  # Force write to OS buffer
+        os.fsync(f.fileno())  # Force OS to write to disk
     
+    # Small delay to ensure file system consistency
+    time.sleep(0.01)
     assert search.search("kiwi") is True
     verify_modification(search)
 
@@ -318,13 +322,21 @@ def test_case_sensitivity(test_data_file, search_algo_info):
     search_class = search_algo_info["class"]
     kwargs = search_algo_info["kwargs"]
     
-    search = search_class(test_file, **kwargs)
+    search_case_sensitive = search_class(test_file, case_sensitive = True, **kwargs)
     
-    assert search.search("Apple") is False
-    assert search.search("BANANA") is False
+    assert search_case_sensitive.search("Apple") is False
+    assert search_case_sensitive.search("BANANA") is False
     
-    assert search.search("apple") is True
-    assert search.search("banana") is True
+    assert search_case_sensitive.search("apple") is True
+    assert search_case_sensitive.search("banana") is True
+    
+    search_no_case_sensitive = search_class(test_file, case_sensitive = False, **kwargs)
+    
+    assert search_no_case_sensitive.search("Apple") is True
+    assert search_no_case_sensitive.search("BANANA") is True
+    
+    assert search_no_case_sensitive.search("apple") is True
+    assert search_no_case_sensitive.search("banana") is True
 
 
 class TestBinarySearch:

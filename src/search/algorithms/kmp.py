@@ -22,7 +22,7 @@ class KMP(SearchAlgorithm):
             including the number of comparisons, search time, lines processed,
             and prefix table computations.
     """
-    def __init__(self, file_path: str, reread_on_query: bool = False):
+    def __init__(self, file_path: str, reread_on_query: bool = False, case_sensitive: bool = True) -> None:
         """
         Initializes the KMP (Knuth-Morris-Pratt) search algorithm instance.
 
@@ -33,6 +33,7 @@ class KMP(SearchAlgorithm):
         """
         super().__init__(file_path)
         self.reread_on_query = reread_on_query
+        self.case_sensitive = case_sensitive
         self._stats = {
             "comparisons": 0,
             "search_time": 0,
@@ -90,7 +91,7 @@ class KMP(SearchAlgorithm):
         
         return False
     
-    def search(self, query: str) -> Iterator[str]:
+    def search(self, query: str) -> bool:
         start_time = time.time()
         super().search(query)
         if self.reread_on_query:
@@ -100,12 +101,14 @@ class KMP(SearchAlgorithm):
         self._stats["search_time"] = 0
         self._stats["prefix_table_computations"] = 0
         
-        result = False
         for line in self._lines:
+            if not self.case_sensitive:
+                line = line.lower()
+                query = query.lower()
             if self._kmp_search(line, query):
                 return True
         self._stats["search_time"] = time.time() - start_time
-        return result
+        return False
     
     def get_stats(self) -> dict:
         return self._stats

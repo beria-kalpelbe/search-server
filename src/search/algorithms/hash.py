@@ -17,7 +17,7 @@ class HashSearch(SearchAlgorithm):
         _hash_set (Set[str]): A set of hashed lines read from the file.
     """
 
-    def __init__(self, file_path: str, reread_on_query: bool = False) -> None:
+    def __init__(self, file_path: str, reread_on_query: bool = False, case_sensitive: bool = True) -> None:
         """
         Initialize the HashSearch instance.
 
@@ -29,6 +29,7 @@ class HashSearch(SearchAlgorithm):
         self.stats = {"hash_time": 0.0, "search_time": 0.0}
         self._hash_set: Set[str] = set()
         self.reread_on_query = reread_on_query
+        self.case_sensitive = case_sensitive
 
         if not self.reread_on_query:
             self._read_file()
@@ -46,7 +47,10 @@ class HashSearch(SearchAlgorithm):
         try:
             with open(self.file_path, 'rb') as file:
                 for line in file:
-                    self._hash_set.add(line.rstrip().decode('utf-8'))
+                    if not self.case_sensitive:
+                        self._hash_set.add(line.lower().rstrip().decode('utf-8'))
+                    else:
+                        self._hash_set.add(line.rstrip().decode('utf-8'))
         except FileNotFoundError:
             raise FileNotFoundError(f"File not found: {self.file_path}")
         except Exception as e:
@@ -65,7 +69,9 @@ class HashSearch(SearchAlgorithm):
             bool: True if the query is found, False otherwise.
         """
         start_time = time.time()
-
+        if not self.case_sensitive:
+            query = query.lower()
+            
         if self.reread_on_query:
             self._read_file()
 

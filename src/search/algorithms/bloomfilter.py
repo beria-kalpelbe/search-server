@@ -24,7 +24,8 @@ class BloomFilterSearch(SearchAlgorithm):
         file_path: str,
         reread_on_query: bool = False,
         capacity: int = 1_000_000,
-        error_rate: float = 0.001
+        error_rate: float = 0.001,
+        case_sensitive: bool = True
     ) -> None:
         """
         Initialize the BloomFilterSearch instance.
@@ -39,6 +40,7 @@ class BloomFilterSearch(SearchAlgorithm):
         self.stats = {"search_time": 0.0}
         self._bloom = BloomFilter(capacity=capacity, error_rate=error_rate)
         self._lines: Set[str] = set()
+        self.case_sensitive = case_sensitive
         self.reread_on_query = reread_on_query
 
         if not self.reread_on_query:
@@ -57,6 +59,8 @@ class BloomFilterSearch(SearchAlgorithm):
                 self._lines.clear()
                 for line in file:
                     line_str = line.rstrip().decode('utf-8')
+                    if not self.case_sensitive:
+                        line_str = line_str.lower()
                     self._bloom.add(line_str)
                     self._lines.add(line_str)
         except FileNotFoundError:
@@ -78,7 +82,8 @@ class BloomFilterSearch(SearchAlgorithm):
 
         if self.reread_on_query:
             self._read_file()
-
+        if not self.case_sensitive:
+            query = query.lower()
         result = query in self._bloom and query in self._lines
         self.stats["search_time"] = time.time() - start_time
         return result

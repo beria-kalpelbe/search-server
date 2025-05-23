@@ -17,7 +17,7 @@ class BinarySearch(SearchAlgorithm):
         _sorted_lines (List[str]): Sorted lines read from the file.
     """
 
-    def __init__(self, file_path: str, reread_on_query: bool = False) -> None:
+    def __init__(self, file_path: str, reread_on_query: bool = False, case_sensitive:bool = True) -> None:
         """
         Initialize the BinarySearch instance.
 
@@ -29,6 +29,7 @@ class BinarySearch(SearchAlgorithm):
         self.reread_on_query = reread_on_query
         self.stats = {"comparisons": 0, "time_taken": 0.0}
         self._lines = []
+        self.case_sensitive = case_sensitive
         self._sorted_lines: List[str] = []
 
         if not self.reread_on_query:
@@ -56,7 +57,8 @@ class BinarySearch(SearchAlgorithm):
         """
         start_time = time.time()
         self.stats["comparisons"] = 0
-
+        if not self.case_sensitive:
+            query = query.lower()
         if self.reread_on_query:
             self._read_and_sort_file()
 

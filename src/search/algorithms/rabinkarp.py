@@ -43,7 +43,7 @@ class RabinKarp(SearchAlgorithm):
         >>> rk.get_stats()
         {'comparisons': 12, 'time_elapsed': 0.0005, 'lines_processed': 1000, 'hash_collisions': 0}
     """
-    def __init__(self, file_path: str, reread_on_query: bool = False, base: int = 256, prime: int = 101):
+    def __init__(self, file_path: str, reread_on_query: bool = False, base: int = 256, prime: int = 101, case_sensitive: bool = True) -> None:
         super().__init__(file_path)
         self.reread_on_query = reread_on_query
         self._stats = {
@@ -54,6 +54,7 @@ class RabinKarp(SearchAlgorithm):
         }
         self.base = base
         self.prime = prime 
+        self.case_sensitive = case_sensitive
         if not self.reread_on_query:
             self._read_file()
     
@@ -92,7 +93,9 @@ class RabinKarp(SearchAlgorithm):
         for line in self._lines:
             if len(line) != len(query):
                 continue
-            
+            if not self.case_sensitive:
+                line = line.lower()
+                query = query.lower()
             line_hash = self._calculate_hash(line, len(query))
             query_hash = self._calculate_hash(query, len(query))
             

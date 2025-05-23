@@ -44,6 +44,7 @@ class SSLHandler:
         """
         Get or create an SSL context for maximum speed
         """
+        start = time.time()
         if cls._context_initialized and cls._ssl_context:
             return cls._ssl_context
             
@@ -253,7 +254,7 @@ class SearchHandler(socketserver.BaseRequestHandler):
                     self.request.sendall(self.RESPONSE_FOUND if result else self.RESPONSE_NOT_FOUND)
                     
                     # Minimal logging for performance
-                    if self.config.debug and request_count % 100 == 0:
+                    if self.config.debug:
                         self.config.logger.debug(
                             "[%s] Batch processed: %d requests",
                             session_id,

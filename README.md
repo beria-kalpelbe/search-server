@@ -4,101 +4,18 @@ A high-performance server that checks if a string exists in a file using multipl
 
 ![Python](https://img.shields.io/badge/python-3.12-green.svg)
 
-## Features
+## Overview
 
-- **Multiple Search Algorithms**: Choose from 9 different search implementations
+### Features
+
+- **Multiple Search Algorithms**: Choose from 10 different search implementations
 - **High Performance**: Optimized for speed with configurable worker threads
-- **Secure Communication**: Built-in SSL/TLS support
-- **Configurable**: Extensive configuration options
+- **Secure Communication**: Built-in SSL support with certificate management
+- **Configurable**: Extensive configuration options via config files
 - **Linux Daemon**: Runs as a system service for production deployments
+- **Simple Protocol**: Text-based request/response communication
 
-## Quick Start
-
-### Server Installation
-
-1. **Set up Python environment**:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
-
-2. **Generate SSL certificates** (optional for secure connections):
-   ```bash
-   mkdir -p certs
-   openssl req -x509 -newkey rsa:2048 -keyout certs/server.key \
-     -out certs/server.crt -days 365 -nodes -subj "/CN=localhost"
-   ```
-
-3. **Prepare data file**:
-   ```bash
-   mkdir -p data
-   echo "Existing line" > data/test.txt
-   ```
-
-4. **Install as system service**:
-   ```bash
-   chmod +x service/install.sh
-   sudo service/install.sh
-   ```
-
-5. **Verify installation**:
-   ```bash
-   systemctl status search-server.service
-   ```
-
-### Client Usage
-
-1. **Set up environment**:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
-
-2. **Send test queries**:
-    Use the client script to send search queries to the server. Below are the available parameters for the command:
-
-    - `--host`: Server hostname (default: `localhost`).
-    - `--port`: Server port (default: `8443`).
-    - `--no-ssl`: Disable SSL for the connection.
-    - `--cert`: Path to the server certificate for SSL verification.
-    - `--queries`: List of search queries to send (default: `['test']`).
-    - `--threads`: Number of concurrent threads to use (default: `10`).
-
-    Example usage:
-    ```bash
-    python src/client/client.py --host localhost --port 8443 --queries "Existing line" "Unexisting line"
-    ```
-    This command sends two queries, `"Existing line"` and `"Unexisting line"`, to the server running on `localhost` at port `8443`. By default, SSL is enabled unless `--no-ssl` is specified.
-
-## Configuration
-
-Edit the server configuration in `src/config/server.conf`:
-
-```ini
-[SERVER]
-HOST = localhost
-PORT = 8443
-WORKERS = 100
-DEBUG = false
-USE_SSL = true
-SSL_CERT = certs/server.crt
-SSL_KEY = certs/server.key
-
-[SEARCH]
-ALGORITHM = regex
-LINUX_PATH = data/200k.txt
-CASE_SENSITIVE = true
-MAX_RESULTS = 100
-REREAD_ON_QUERY = true
-
-[LOGGING]
-LEVEL = INFO
-FILE = logs/server.log
-```
-
-## Search Algorithms
+### Search Algorithms
 
 | Algorithm    | Description                                         | Best Use Case                      |
 |--------------|-----------------------------------------------------|-----------------------------------|
@@ -113,31 +30,117 @@ FILE = logs/server.log
 | `rabinkarp`  | Rabin-Karp search                                   | Multiple pattern searching         |
 | `grep`       | Leverages the `grep` command-line tool for search   | High-performance file scanning     |
 
-## Testing
+## Installation
+
+### Prerequisites
+
+Set up Python environment -- Python 3.12:
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Basic Setup
+
+1. **Prepare data file**:
+   ```bash
+   cd data
+   wget https://tests.quantitative-analysis.com/200k.txt
+   cd ../
+   ```
+
+2. **Generate SSL certificates** (optional for secure connections):
+   ```bash
+   mkdir -p certs
+   openssl req -x509 -newkey rsa:2048 -keyout certs/server.key \
+     -out certs/server.crt -days 365 -nodes -subj "/CN=localhost"
+   ```
+
+### Configuration
+
+Edit the server configuration in `src/config/server.conf`:
+```ini
+[SERVER]
+HOST = localhost
+PORT = 8443
+WORKERS = 100
+DEBUG = false
+USE_SSL = true
+SSL_CERT = certs/server.crt
+SSL_KEY = certs/server.key
+
+[SEARCH]
+ALGORITHM = regex
+LINUX_PATH = data/200k.txt
+CASE_SENSITIVE = true
+REREAD_ON_QUERY = true
+
+[LOGGING]
+LEVEL = INFO
+FILE = logs/server.log
+```
+
+### Production Deployment
+
+Install as system service:
+```bash
+chmod +x service/install.sh
+sudo service/install.sh
+```
+
+Verify installation:
+```bash
+systemctl status search-server.service
+```
+
+## Usage
+
+### Client Interface
+
+Use the client script to send search queries to the server:
+
+```bash
+python src/client/client.py --host localhost --port 8443 --queries "Existing line" "Nonexistent line"
+```
+
+#### Client Parameters
+
+- `--host`: Server hostname (default: `localhost`)
+- `--port`: Server port (default: `8443`)
+- `--no-ssl`: Disable SSL for the connection
+- `--cert`: Path to the server certificate for SSL verification
+- `--queries`: List of search queries to send (default: `['test']`)
+- `--threads`: Number of concurrent threads to use (default: `10`)
+
+### Protocol
+
+The server implements a simple text-based protocol:
+
+**Request**: Plain text query string
+**Response**: 
+- `STRING EXISTS` - if the string is found
+- `STRING NOT FOUND` - if the string is not found
+
+## Service Management
+
+### Common Commands
+
+- **Check status**: `systemctl status search-server.service`
+- **View logs**: `sudo journalctl -u search-server.service -f`  
+- **Restart service**: `sudo systemctl restart search-server.service`
+- **Stop service**: `sudo systemctl stop search-server.service`
+
+## Development
+
+### Testing
 
 Run the test suite with pytest:
-
 ```bash
 pytest tests
 ```
 
-## Protocol
-
-The server implements a simple text-based protocol:
-
-- **Request**: Plain text query string
-- **Response**: 
-  - `STRING EXISTS` - if the string is found
-  - `STRING NOT FOUND` - if the string is not found
-
-## Service Management
-
-- **Check status**: `systemctl status search-server.service`
-- **View logs**: `sudo journalctl -u search-server.service -f`
-- **Restart service**: `sudo systemctl restart search-server.service`
-- **Stop service**: `sudo systemctl stop search-server.service`
-
-## Project Structure
+### Project Structure
 
 ```
 .
