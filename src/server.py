@@ -40,14 +40,16 @@ class SSLHandler:
     _context_initialized = False
     
     @classmethod
-    def get_ssl_context(cls, ssl_cert, ssl_key):
+    def initialize_ssl_context(cls, ssl_cert, ssl_key):
         """
-        Get or create an SSL context for maximum speed
+        Pre-initialize SSL context at server startup for maximum speed
         """
-        start = time.time()
         if cls._context_initialized and cls._ssl_context:
             return cls._ssl_context
             
+        print(f"\033[96m🔐 Initializing SSL context...\033[0m")
+        start_time = time.time()
+        
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         
         # Performance-first SSL configuration
@@ -84,17 +86,110 @@ class SSLHandler:
         cls._ssl_context = context
         cls._context_initialized = True
         
+        init_time = (time.time() - start_time) * 1000
+        print(f"\033[92m✅ SSL context initialized in {init_time:.2f}ms\033[0m")
+        
         return context
+    
+    @classmethod
+    def get_ssl_context(cls, ssl_cert=None, ssl_key=None):
+        """
+        Get pre-initialized SSL context
+        """
+        if not cls._context_initialized:
+            raise RuntimeError("SSL context not initialized. Call initialize_ssl_context() first.")
+        return cls._ssl_context
+
+
+class SearchAlgorithmManager:
+    """
+    Manages pre-initialized search algorithm instances
+    """
+    _instances: Dict[str, SearchAlgorithm] = {}
+    _initialized = False
+    
+    @classmethod
+    def initialize_algorithms(cls, config: Config):
+        """
+        Pre-initialize all search algorithm instances at server startup
+        """
+        if cls._initialized:
+            return
+            
+        print(f"\033[96m🔍 Initializing search algorithms...\033[0m")
+        start_time = time.time()
+        
+        algorithm_map = {
+            'simple': SimpleSearch,
+            'inmemory': InMemorySearch,
+            'binary': BinarySearch,
+            'hash': HashSearch,
+            'regex': RegexSearch,
+            'bloom': BloomFilterSearch,
+            'boyermoore': BoyerMoore,
+            'rabinkarp': RabinKarp,
+            'kmp': KMP,
+            'grep': GrepSearch,
+        }
+        
+        # Initialize the primary algorithm
+        algo_key = f"{config.search_algorithm}_{config.linux_path}"
+        algorithm_class = algorithm_map.get(
+            config.search_algorithm.lower(), InMemorySearch
+        )
+        
+        print(f"\033[94m   📚 Loading {config.search_algorithm} algorithm with data from {config.linux_path}...\033[0m")
+        algo_start = time.time()
+        
+        instance = algorithm_class(config.linux_path, config.reread_on_query)
+        
+        # Force initialization of data if the algorithm supports it
+        if hasattr(instance, 'initialize') and callable(getattr(instance, 'initialize')):
+            instance.initialize()
+        elif hasattr(instance, 'load_data') and callable(getattr(instance, 'load_data')):
+            instance.load_data()
+        elif hasattr(instance, '_prepare_data') and callable(getattr(instance, '_prepare_data')):
+            instance._prepare_data()
+        
+        # For some algorithms, we might need to trigger a dummy search to fully initialize
+        try:
+            # This should be fast and will trigger any lazy initialization
+            instance.search("__DUMMY_INIT_QUERY__")
+        except Exception:
+            # Ignore errors from dummy search
+            pass
+            
+        cls._instances[algo_key] = instance
+        
+        algo_time = (time.time() - algo_start) * 1000
+        total_time = (time.time() - start_time) * 1000
+        
+        print(f"\033[92m   ✅ {config.search_algorithm} algorithm initialized in {algo_time:.2f}ms\033[0m")
+        print(f"\033[92m✅ All search algorithms initialized in {total_time:.2f}ms\033[0m")
+        
+        cls._initialized = True
+    
+    @classmethod
+    def get_algorithm(cls, config: Config) -> SearchAlgorithm:
+        """
+        Get pre-initialized search algorithm instance
+        """
+        if not cls._initialized:
+            raise RuntimeError("Search algorithms not initialized. Call initialize_algorithms() first.")
+            
+        algo_key = f"{config.search_algorithm}_{config.linux_path}"
+        if algo_key not in cls._instances:
+            raise RuntimeError(f"Algorithm {config.search_algorithm} not found in pre-initialized instances.")
+            
+        algorithm = cls._instances[algo_key]
+        algorithm.reread_on_query = config.reread_on_query
+        return algorithm
 
 
 class SearchHandler(socketserver.BaseRequestHandler):
     """
     Handles incoming client requests and processes search queries.
-
-    Attributes:
-        algorithm_instances (Dict[str, SearchAlgorithm]): Cached instances of search algorithms.
     """
-    algorithm_instances: Dict[str, SearchAlgorithm] = {}
     
     # Precompiled responses for better performance
     RESPONSE_FOUND = b"STRING EXISTS\n"
@@ -112,24 +207,21 @@ class SearchHandler(socketserver.BaseRequestHandler):
 
     def setup(self) -> None:
         """
-        High-speed setup with SSL handling.
+        High-speed setup with pre-initialized SSL and algorithms.
         """
         if self.config.use_ssl:
             self._setup_high_speed_ssl()
             
-        # Initialize search algorithm (cached)
-        self._initialize_search_algorithm()
+        # Get pre-initialized search algorithm
+        self.search_algo = SearchAlgorithmManager.get_algorithm(self.config)
 
     def _setup_high_speed_ssl(self) -> None:
         """
-        SSL setup for maximum performance
+        SSL setup using pre-initialized context for maximum performance
         """
         try:
-            # Get the SSL context
-            context = SSLHandler.get_ssl_context(
-                self.config.ssl_cert, 
-                self.config.ssl_key
-            )
+            # Get the pre-initialized SSL context
+            context = SSLHandler.get_ssl_context()
             
             # Optimize the underlying socket before SSL wrapping
             try:
@@ -162,7 +254,7 @@ class SearchHandler(socketserver.BaseRequestHandler):
             self.request.do_handshake()
             
             # Restore original timeout or set a reasonable one for data transfer
-            self.request.settimeout(1.0)  # 10 seconds for data operations
+            self.request.settimeout(1.0)  # 1 second for data operations
             
         except ssl.SSLError as e:
             if self.config.debug:
@@ -178,31 +270,6 @@ class SearchHandler(socketserver.BaseRequestHandler):
                 self.config.logger.error(f"\033[91mSSL setup error: {e}\033[0m")
             raise
 
-    def _initialize_search_algorithm(self) -> None:
-        """Initialize the search algorithm instance (or get from cache)"""
-        algo_key = f"{self.config.search_algorithm}_{self.config.linux_path}"
-        if algo_key not in self.algorithm_instances:
-            algorithm_map = {
-                'simple': SimpleSearch,
-                'inmemory': InMemorySearch,
-                'binary': BinarySearch,
-                'hash': HashSearch,
-                'regex': RegexSearch,
-                'bloom': BloomFilterSearch,
-                'boyermoore': BoyerMoore,
-                'rabinkarp': RabinKarp,
-                'kmp': KMP,
-                'grep': GrepSearch,
-            }
-            algorithm_class = algorithm_map.get(
-                self.config.search_algorithm.lower(), InMemorySearch
-            )
-            self.algorithm_instances[algo_key] = algorithm_class(
-                self.config.linux_path, self.config.reread_on_query
-            )
-        self.search_algo = self.algorithm_instances[algo_key]
-        self.search_algo.reread_on_query = self.config.reread_on_query
-
     def handle(self) -> None:
         """
         Handles client connections and processes search requests.
@@ -215,7 +282,7 @@ class SearchHandler(socketserver.BaseRequestHandler):
             self.config.logger.info("\033[92m[%s] New connection established\033[0m", session_id)
             
         request_count = 0
-
+        
         try:
             while True:
                 try:
@@ -237,10 +304,12 @@ class SearchHandler(socketserver.BaseRequestHandler):
                     if not query:
                         self.request.sendall(self.RESPONSE_ERROR_EMPTY)
                         break
+                    
                     start = time.time()
-                    # Process the query directly using cached algorithm
+                    # Process the query directly using pre-initialized algorithm
                     result = self.search_algo.search(query)
                     search_time = 1000 * (time.time() - start)
+                    
                     # Use pre-compiled response for maximum speed
                     if self.config.debug:
                         if result:
@@ -251,18 +320,19 @@ class SearchHandler(socketserver.BaseRequestHandler):
                             self.config.logger.warning(
                                 f"\033[93m⚠ String not found: '{query}' (searched in {search_time:.2f}ms)\033[0m"
                             )
+                    
                     self.request.sendall(self.RESPONSE_FOUND if result else self.RESPONSE_NOT_FOUND)
                     
                     # Minimal logging for performance
                     if self.config.debug:
                         self.config.logger.debug(
-                            "[%s] Batch processed: %d requests",
+                            "[%s] Request #%d processed in %.2fms",
                             session_id,
-                            request_count
+                            request_count,
+                            search_time
                         )
-                
+                        
                 except UnicodeDecodeError:
-                    
                     self.request.sendall(self.RESPONSE_ERROR_ENCODING)
                 except Exception as e:
                     if self.config.debug:
@@ -287,7 +357,7 @@ class SearchHandler(socketserver.BaseRequestHandler):
 
     def _receive_request_optimized(self) -> Optional[bytes]:
         """
-        Ultra-method to receive request payload.
+        Ultra-fast method to receive request payload.
         """
         # Try to get the complete request in one shot (most common case)
         try:
@@ -440,6 +510,7 @@ class ThreadedTCPServer(ThreadPoolMixIn, socketserver.TCPServer):
             max_workers=self._max_workers,
             thread_name_prefix="Worker"
         )
+        
         # Additional server-level optimizations
         socketserver.TCPServer.__init__(self, server_address, RequestHandlerClass)
         
@@ -472,8 +543,12 @@ class ThreadedTCPServer(ThreadPoolMixIn, socketserver.TCPServer):
 
 def run_server(config_file: str = "src/config/server.conf"):
     """
-    Main function to run the high-speed search server.
+    Main function to run the high-speed search server with pre-initialization.
     """
+    print(f"\033[96m🚀 Starting High-Speed Search Server...\033[0m")
+    startup_start = time.time()
+    
+    # Load configuration
     config = Config(config_file)
     
     # Performance optimizations in configuration
@@ -481,16 +556,46 @@ def run_server(config_file: str = "src/config/server.conf"):
         # Auto-configure optimal number of workers based on CPU cores
         config.workers = min(DEFAULT_THREAD_POOL_SIZE, psutil.cpu_count(logical=True) * 2)
     
-    # Use server implementation
+    # PRE-INITIALIZE EVERYTHING AT STARTUP
+    print(f"\033[96m⚡ Pre-initializing server components...\033[0m")
+    
+    # 1. Pre-initialize SSL context if needed
+    if config.use_ssl:
+        try:
+            SSLHandler.initialize_ssl_context(config.ssl_cert, config.ssl_key)
+        except Exception as e:
+            print(f"\033[91m❌ Failed to initialize SSL: {e}\033[0m")
+            return
+    
+    # 2. Pre-initialize search algorithms
+    try:
+        SearchAlgorithmManager.initialize_algorithms(config)
+    except Exception as e:
+        print(f"\033[91m❌ Failed to initialize search algorithms: {e}\033[0m")
+        return
+    
+    # 3. Create server instance
+    print(f"\033[96m🌐 Creating server instance...\033[0m")
+    server_create_start = time.time()
     server = ThreadedTCPServer((config.host, config.port), SearchHandler, config)
+    server_create_time = (time.time() - server_create_start) * 1000
+    
+    startup_time = (time.time() - startup_start) * 1000
+    
+    # Display startup information
     VERSION = getattr(config, 'version', '1.0.0')
     start_time = datetime.datetime.now()
     
     ssl_status = "🔐 SSL ENABLED" if config.use_ssl else "🔓 SSL DISABLED"
+    print(f"\033[92m" + "="*60 + "\033[0m")
     print(f"\033[92m🚀 High-Speed Search Server v{VERSION} - {ssl_status}\033[0m")
     print(f"\033[94m📡 Listening on {config.host}:{config.port}\033[0m")
     print(f"\033[93m📅 Started: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
     print(f"\033[96m⚡ Workers: {config.workers} | Algorithm: {config.search_algorithm}\033[0m")
+    print(f"\033[95m⏱️  Total startup time: {startup_time:.2f}ms\033[0m")
+    print(f"\033[95m🏗️  Server creation: {server_create_time:.2f}ms\033[0m")
+    print(f"\033[92m✅ Server is ready to handle requests immediately!\033[0m")
+    print(f"\033[92m" + "="*60 + "\033[0m")
     
     try:
         server.serve_forever()

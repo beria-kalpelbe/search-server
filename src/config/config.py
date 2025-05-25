@@ -359,7 +359,6 @@ class Config:
                 file_handler.setFormatter(formatter)
                 file_handler.setLevel(log_level)
                 self.logger.addHandler(file_handler)
-                self.logger.info(f"File logging initialized: {self.log_file}")
             except Exception as e:
                 raise ConfigError(f"Failed to initialize file logging for '{self.log_file}': {e}") from e
 
